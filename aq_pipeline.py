@@ -35,6 +35,9 @@ stations = aq.remove_dup_stations(stations)
 # split up the stations in to good stations (enough data) and bad ones (to be imputed)
 gs,bs = aq.split_fill_unfill_stations(nearby_data)
 
+# replace missing data in predictors (won't be too many of these)
+gs = aq.fill_missing_predictors(gs)
+
 # show the good and bad stations
 fig = plt.figure()
 ax_g = fig.add_subplot(2,1,1)
@@ -44,4 +47,5 @@ ax_b.matshow(bs.transpose())
 
 # fill in missing data in each "bad column"
 for column in bs:
-    
+    col_vals = bs[column]
+    aq.create_model_for_site(gs,col_vals)

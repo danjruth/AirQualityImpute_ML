@@ -168,10 +168,70 @@ def split_fill_unfill_stations(df):
             bad_stations = pd.concat([bad_stations,col_vals],axis=1)
             
     return good_stations, bad_stations
-        
+    
+def fill_missing_predictors(predictors):    
+    
+    import sklearn.preprocessing
+    imp = sklearn.preprocessing.Imputer(missing_values='NaN', strategy='mean', axis=0)
+    predictors = imp.fit_transform(predictors)
+    
+    return predictors
+  
 def create_model_for_site(predictors,site):
     
-    import sklearn.linear_model
-
-    linear_model = sklearn.linear_model.LinearRegression()
     
+    
+    # split up known rows from unkown rows
+    have_out_vals = np.isnan(site)
+    have_out_vals = np.where(have_out_vals==False)[0]
+    need_out_vals = ~np.isnan(site)
+    need_out_vals = np.where(need_out_vals==False)[0]
+    num_known = len(have_out_vals)    
+    known_x = predictors[have_out_vals,:]
+    known_x = known_x
+    known_y = site[have_out_vals]
+    
+    print('known x:')
+    print(known_x)
+    print('known y:')
+    print(known_y)
+    
+    # shuffle rows
+    from sklearn.utils import shuffle
+    known_x_noshuffle = known_x
+    known_y_noshuffle = known_y
+    known_x,known_y = shuffle(known_x,known_y)
+    known_y = known_y.ravel()
+    
+    train_indx = range(0,int(num_known*.75))
+    test_indx = range(int(num_known*.75),num_known)
+    
+    
+    
+    # create/fit model
+    
+    import sklearn.linear_model
+    linear_model = sklearn.linear_model.LinearRegression()
+    linear_model.fit(known_x[train_indx,:], known_y[train_indx])
+    
+    # test the model
+    linear_predicted = linear_model.predict(known_x[test_indx])
+    linear_known_predicted = linear_model.predict(known_x[train_indx])
+    
+    # target vs predicted
+    plt.figure()
+    plt.plot(known_y[test_indx],linear_predicted,'.',label='Linear model',color='b')
+    plt.plot(known_y[train_indx],linear_known_predicted,'x',color='b')
+    plt.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
+    plt.xlabel('Target')
+    plt.ylabel('Predicted')
+    plt.legend(loc=4)
+    plt.title('Model performance')
+    plt.show()
+    
+    model = linear_model
+    
+    return model
+
+
+#def fill_with_model(predictors,site,model):
