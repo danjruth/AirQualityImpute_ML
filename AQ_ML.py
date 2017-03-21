@@ -124,9 +124,7 @@ def remove_dup_stations(param_stations):
     
 # pick out the values from stations nearby
 def extract_nearby_values(stations,all_data,start_date,end_date):
-    
-    #times = pd.date_range(start=start_date,end=end_date)
-    
+        
     df = pd.DataFrame()
     
     # collect data for each nearby station
@@ -145,7 +143,8 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
         site_series = pd.Series(index=site_rawdata.index,data=site_rawdata['Arithmetic Mean'])
         site_series = site_series.rename(idx)
         
-        df = pd.concat([df,site_series],axis=1)
+        if ~site_series.isnull().all():
+            df = pd.concat([df,site_series],axis=1)
         
     return df
     
@@ -176,25 +175,27 @@ def fill_missing_predictors(predictors):
     predictors = imp.fit_transform(predictors)
     
     return predictors
-  
-def create_model_for_site(predictors,site):
     
-    
+def split_known_unknown_rows(predictors,site):
     
     # split up known rows from unkown rows
     have_out_vals = np.isnan(site)
     have_out_vals = np.where(have_out_vals==False)[0]
     need_out_vals = ~np.isnan(site)
     need_out_vals = np.where(need_out_vals==False)[0]
-    num_known = len(have_out_vals)    
-    known_x = predictors[have_out_vals,:]
-    known_x = known_x
-    known_y = site[have_out_vals]
     
-    print('known x:')
-    print(known_x)
-    print('known y:')
-    print(known_y)
+    known_x = predictors[have_out_vals,:]
+    known_y = site[have_out_vals]
+    unknown_x = predictors[need_out_vals,:]
+    
+    return known_x,known_y,unknown_x
+    
+  
+def create_model_for_site(predictors,site):
+    
+    known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
+    if (len(known_y)<5 or len(unknown_x)<5):
+        return None
     
     # shuffle rows
     from sklearn.utils import shuffle
@@ -203,10 +204,10 @@ def create_model_for_site(predictors,site):
     known_x,known_y = shuffle(known_x,known_y)
     known_y = known_y.ravel()
     
+    # split known into test/train
+    num_known = len(known_y)
     train_indx = range(0,int(num_known*.75))
     test_indx = range(int(num_known*.75),num_known)
-    
-    
     
     # create/fit model
     
@@ -219,6 +220,7 @@ def create_model_for_site(predictors,site):
     linear_known_predicted = linear_model.predict(known_x[train_indx])
     
     # target vs predicted
+    '''
     plt.figure()
     plt.plot(known_y[test_indx],linear_predicted,'.',label='Linear model',color='b')
     plt.plot(known_y[train_indx],linear_known_predicted,'x',color='b')
@@ -228,10 +230,23 @@ def create_model_for_site(predictors,site):
     plt.legend(loc=4)
     plt.title('Model performance')
     plt.show()
+    '''
     
     model = linear_model
     
     return model
 
 
-#def fill_with_model(predictors,site,model):
+def fill_with_model(predictors,site,model):
+    
+    if model is None:
+        return site
+    
+    known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
+    
+    predicted_y = model.predict(unknown_x)
+    
+    print(predicted_y)
+    
+    site[pd.isnull(site)] = predicted_y
+    return site
