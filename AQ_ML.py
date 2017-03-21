@@ -18,16 +18,7 @@ import pandas as pd
 R_earth =  6371.0 # [km]
 param_code = 81102
 
-# create a column of station ids and make that the index for a DF
-def addon_stationid(df):
-    # create column of station ids. this will be the index
-    station_ids = pd.Series(index=df.index)
-    for i in station_ids.index:
-        station_ids.ix[i] = str(df.ix[i]['State Code'])+'_'+str(df.ix[i]['County Code'])+'_'+str(df.ix[i]['Site Number'])
-        print(i,len(station_ids.index))
-    df['station_ids'] = station_ids    
-    
-    return df
+
     
 #station_df_2 = addon_stationid(station_df)
     
@@ -53,6 +44,7 @@ def lat_lon_dist(point1,point2):
     
     return d
     
+
 def identify_sampling_rate(station_id,all_data,start_date=None,end_date=None):
     
     all_data = addon_stationid(all_data)
@@ -62,6 +54,9 @@ def identify_sampling_rate(station_id,all_data,start_date=None,end_date=None):
     
     return station_data
 
+# with a given latlon and r_max, pick out stations within that radius from a df
+# with STATION DATA, not the metadata spreadsheet. This way we actually get 
+# sites that have data
 def identify_nearby_stations(latlon,r_max,df):
     
     # separate latitude/longitude
@@ -76,13 +71,45 @@ def identify_nearby_stations(latlon,r_max,df):
     print(d)
     param_stations['Distance'] = d
     param_stations = param_stations.sort_values(['Distance'],ascending=True)
-    param_stations = param_stations[param_stations['Distance']<=r_max]
     
-                                    
-    param_stations = addon_stationid(param_stations)
+    # get rid of stations that are far away
+    param_stations = param_stations[param_stations['Distance']<=r_max]
+
+    return param_stations
+    
+    
+# create a column of station ids
+def addon_stationid(df):
+    # create column of station ids. this will be the index
+    station_ids = pd.Series(index=df.index)
+    for i in station_ids.index:
+        station_ids.ix[i] = str(df.ix[i]['State Code'])+'_'+str(df.ix[i]['County Code'])+'_'+str(df.ix[i]['Site Number'])
+        print(i,len(station_ids.index))
+    df['station_ids'] = station_ids    
+    
+    return df
+    
+# remove duplicate stations based on the station id (already created)
+def remove_dup_stations(param_stations):
+    
+    # make the IDS the index, and get rid of duplicates
     param_stations = param_stations.set_index('station_ids')
     param_stations = param_stations[~param_stations.index.duplicated(keep='first')]
 
     print(param_stations)
     
     return param_stations
+    
+# pick out the values from stations nearby
+def extract_nearby_values(stations,all_data):
+    
+    for idx in stations.index:
+        
+        county_code = stations.loc[idx]['County Code']
+        state_code = stations.loc[idx]['State Code']
+        site_number = stations.loc[idx]['Site Number']
+        
+        site_rawdata = all_data[(all_data['County Code']==county_code)&(all_data['State Code']==state_code)&(all_data['Site Number']==site_number)]
+        site_rawdata = site_rawdata.set_index(site_rawdata['Date Local'])
+        site_series = pd.Series(index=site_rawdata.index,data=site_rawdata['Arithmetic Mean'])
+        site_series = site_series.rename(idx)
