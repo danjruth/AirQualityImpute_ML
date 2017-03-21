@@ -4,7 +4,7 @@ import sklearn.linear_model
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import read_airQuality as aq
+#import read_airQuality as aq
 
 import pickle
 file = open("losangeles_test.obj",'rb')
