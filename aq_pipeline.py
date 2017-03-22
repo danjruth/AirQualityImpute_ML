@@ -17,7 +17,7 @@ if ~('all_data' in locals()):
 
 
 latlon = (39.9526, -75.1652)
-r_max = 150
+r_max = 200
 
 start_date = '2011-01-01'
 end_date = '2015-12-31'
@@ -38,7 +38,7 @@ is_missing = pd.isnull(nearby_data)
 # split up the stations in to good stations (enough data) and bad ones (to be imputed)
 gs,bs = aq.split_fill_unfill_stations(nearby_data)
 
-save_bs = tuple([bs])
+save_bs = tuple([bs]) # WHY IS THIS STILL CHANGING??
 
 # initialize df that'll have the composite data
 filled_all = nearby_data

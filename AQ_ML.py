@@ -10,10 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 #station_df = pd.read_csv()
 #all_data = pd.read_csv(,usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean'])
@@ -224,16 +224,19 @@ def create_model_for_site(predictors,site):
     train_indx = range(0,int(num_known*.75))
     test_indx = range(int(num_known*.75),num_known)
     
-    ## create/fit model    
+
+    # linear model
     import sklearn.linear_model
     model = sklearn.linear_model.LinearRegression()
     model.fit(known_x[train_indx,:], known_y[train_indx])
-    
+
+    '''
     # neural network
-    #import sklearn.neural_network
-    #hl_size = (3,2,2)
-    #model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
-    #model.fit(known_x[train_indx,:], known_y[train_indx])
+    import sklearn.neural_network
+    hl_size = (3,2)
+    model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
+    model.fit(known_x[train_indx,:], known_y[train_indx])
+    '''
 
     
     # test the model
