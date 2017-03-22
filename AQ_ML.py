@@ -224,30 +224,41 @@ def create_model_for_site(predictors,site):
     train_indx = range(0,int(num_known*.75))
     test_indx = range(int(num_known*.75),num_known)
     
-    # create/fit model
-    
+    ## create/fit model    
     import sklearn.linear_model
-    linear_model = sklearn.linear_model.LinearRegression()
-    linear_model.fit(known_x[train_indx,:], known_y[train_indx])
+    model = sklearn.linear_model.LinearRegression()
+    model.fit(known_x[train_indx,:], known_y[train_indx])
+    
+    # neural network
+    #import sklearn.neural_network
+    #hl_size = (3,2,2)
+    #model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
+    #model.fit(known_x[train_indx,:], known_y[train_indx])
+
     
     # test the model
-    linear_predicted = linear_model.predict(known_x[test_indx])
-    linear_known_predicted = linear_model.predict(known_x[train_indx])
+    model_predicted = model.predict(known_x[test_indx])
+    model_known_predicted = model.predict(known_x[train_indx])
+    
+    # r2 score
+    from sklearn.metrics import r2_score
+    r2_predicted = r2_score(known_y[test_indx],model_predicted)
+    r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
     
     # target vs predicted
     plt.figure()
-    plt.plot(known_y[test_indx],linear_predicted,'.',label='Linear model',color='b')
-    plt.plot(known_y[train_indx],linear_known_predicted,'x',color='b')
+    plt.plot(known_y[test_indx],model_predicted,'.',label='Linear model',color='b')
+    plt.plot(known_y[train_indx],model_known_predicted,'x',color='b')
     plt.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
     plt.xlabel('Target')
     plt.ylabel('Predicted')
     plt.legend(loc=4)
-    plt.title('Model performance')
+    plt.title(str(r2_predicted)+', '+str(r2_known_predicted))
     plt.show()
     plt.pause(1)
     plt.show()
     
-    model = linear_model
+    #model = linear_model
     
     return model
 

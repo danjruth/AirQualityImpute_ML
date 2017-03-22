@@ -16,13 +16,11 @@ if ~('all_data' in locals()):
     all_data = all_data.rename(columns={'Site Num':'Site Number'})
 
 
+latlon = (39.9526, -75.1652)
+r_max = 150
 
-
-latlon = (33.424564, -111.928001) # ASU
-r_max = 100
-
-start_date = '2013-03-01'
-end_date = '2014-01-01'
+start_date = '2011-01-01'
+end_date = '2015-12-31'
 
 station_data = pd.DataFrame(index=pd.date_range(start_date,end_date,freq='1D').date)
 
@@ -40,9 +38,11 @@ is_missing = pd.isnull(nearby_data)
 # split up the stations in to good stations (enough data) and bad ones (to be imputed)
 gs,bs = aq.split_fill_unfill_stations(nearby_data)
 
+save_bs = tuple([bs])
+
 # initialize df that'll have the composite data
 filled_all = nearby_data
-plt.matshow(filled_all.transpose())
+plt.matshow(filled_all.transpose(),aspect='auto')
 
 # replace missing data in predictors (won't be too many of these)
 gs = aq.fill_missing_predictors(gs)
@@ -69,20 +69,20 @@ for column in bs:
 # show the filled/unfilled data
 fig2 = plt.figure()
 ax_u = fig2.add_subplot(2,1,1)
-ax_u.matshow(bs.transpose())
+ax_u.matshow(save_bs[0].transpose(),aspect='auto')
 ax_f = fig2.add_subplot(2,1,2)
-ax_f.matshow(filled_bad.transpose())
+ax_f.matshow(filled_bad.transpose(),aspect='auto')
 
-plt.matshow(filled_all.transpose())
+plt.matshow(filled_all.transpose(),aspect='auto')
+plt.xlabel('Day')
+plt.ylabel('Station')
 missing_t = is_missing.transpose()
 ci=0
-for column in missing_t:
+for column in missing_t: # this is very bad
     ri = 0
-    print(column)
-    for row in column:
+    col_vals = missing_t[column]
+    for row in col_vals:
         if row == True:
-            plt.plot(ci,ri,'o',color=(1,1,1))
+            plt.plot(ci,ri,'.',color=None,markersize=2,markeredgecolor='r')
         ri = ri+1
     ci=ci+1    
-
-plt.matshow(is_missing.transpose())
