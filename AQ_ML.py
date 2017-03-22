@@ -10,9 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-
+#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 #station_df = pd.read_csv()
 #all_data = pd.read_csv(,usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean'])
@@ -49,12 +50,22 @@ def lat_lon_dist(point1,point2):
     return d
     
 def identify_sampling_rate(series):
+    
     is_nan = pd.isnull(series)
+    
+    
         
     good_dates = series.index[is_nan==False]
-    diff_period = pd.Series(index=good_dates[0:-1],data=(good_dates[1:]-good_dates[0:-1]))
+    early = pd.to_datetime(good_dates[1:])
+    later = pd.to_datetime(good_dates[0:-1])
+    #print(early)
+    #print(later)
+    diff_data = early-later
+    #print(diff_data)
+    diff_period = pd.Series(index=good_dates[0:-1],data=diff_data)
+    #diff_period = pd.Series(index=good_dates[0:-1],data=)
     
-    print(diff_period)
+    #print(diff_period)
     
     '''
     plt.figure()
@@ -62,7 +73,7 @@ def identify_sampling_rate(series):
     plt.show()
     '''
     
-    estimated_rate = diff_period.median()
+    estimated_rate = np.median(diff_period)
     
     return estimated_rate
     
@@ -118,12 +129,14 @@ def remove_dup_stations(param_stations):
     param_stations = param_stations.set_index('station_ids')
     param_stations = param_stations[~param_stations.index.duplicated(keep='first')]
 
-    print(param_stations)
+    #print(param_stations)
     
     return param_stations
     
 # pick out the values from stations nearby
 def extract_nearby_values(stations,all_data,start_date,end_date):
+    
+    print('extracting!')
         
     df = pd.DataFrame()
     
@@ -155,6 +168,7 @@ def split_fill_unfill_stations(df):
     bad_stations = pd.DataFrame()
     for column in df:
         col_vals = df[column]
+        #print(col_vals)
         rate = identify_sampling_rate(col_vals)
         num_missing = len(col_vals[pd.isnull(col_vals)==True])
         portion_missing = float(num_missing)/float(len(col_vals))
@@ -220,7 +234,6 @@ def create_model_for_site(predictors,site):
     linear_known_predicted = linear_model.predict(known_x[train_indx])
     
     # target vs predicted
-    '''
     plt.figure()
     plt.plot(known_y[test_indx],linear_predicted,'.',label='Linear model',color='b')
     plt.plot(known_y[train_indx],linear_known_predicted,'x',color='b')
@@ -230,7 +243,8 @@ def create_model_for_site(predictors,site):
     plt.legend(loc=4)
     plt.title('Model performance')
     plt.show()
-    '''
+    plt.pause(1)
+    plt.show()
     
     model = linear_model
     
