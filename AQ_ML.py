@@ -73,7 +73,7 @@ def identify_sampling_rate(series):
     plt.show()
     '''
     
-    estimated_rate = np.median(diff_period)
+    estimated_rate = pd.Timedelta(np.median(diff_period))
     
     return estimated_rate
     
@@ -170,6 +170,7 @@ def split_fill_unfill_stations(df):
         col_vals = df[column]
         #print(col_vals)
         rate = identify_sampling_rate(col_vals)
+        print(rate)
         num_missing = len(col_vals[pd.isnull(col_vals)==True])
         portion_missing = float(num_missing)/float(len(col_vals))
         print(num_missing,len(col_vals),portion_missing)

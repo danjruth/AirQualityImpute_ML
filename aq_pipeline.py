@@ -42,7 +42,8 @@ gs,bs = aq.split_fill_unfill_stations(nearby_data)
 
 # initialize df that'll have the composite data
 filled_all = nearby_data
-'''
+plt.matshow(filled_all.transpose())
+
 # replace missing data in predictors (won't be too many of these)
 gs = aq.fill_missing_predictors(gs)
 
@@ -85,4 +86,3 @@ for column in missing_t:
     ci=ci+1    
 
 plt.matshow(is_missing.transpose())
-'''
