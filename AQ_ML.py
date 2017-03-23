@@ -10,10 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 #station_df = pd.read_csv()
 #all_data = pd.read_csv(,usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean'])
@@ -26,7 +26,22 @@ param_code = 81102
 
     
 #station_df_2 = addon_stationid(station_df)
-    
+
+# class for a station that'll have data imputed
+class aq_station:
+    def __init__(self,station_id):
+        self.station_data_series = pd.Series()
+        self.nearby_stations = pd.DataFrame()
+        self.nearby_data_df = pd.DataFrame() # each column is measurements from a different station
+        self.station_info = pd.DataFrame()
+        self.latlon = None
+        self.station_id = station_id
+        self.start_date = None
+        self.end_date = None
+        
+    def get_station_data(self,r_max,df):
+        self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df)
+        self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
 
 
 
@@ -92,7 +107,7 @@ def identify_sampling_rate(station_id,all_data,start_date=None,end_date=None):
 # with a given latlon and r_max, pick out stations within that radius from a df
 # with STATION DATA, not the metadata spreadsheet. This way we actually get 
 # sites that have data
-def identify_nearby_stations(latlon,r_max,df):
+def identify_nearby_stations(latlon,r_max,df,ignore_closest=False):
     
     # separate latitude/longitude
     my_lat = latlon[0]
@@ -108,6 +123,9 @@ def identify_nearby_stations(latlon,r_max,df):
     
     # get rid of stations that are far away
     param_stations = param_stations[param_stations['Distance']<=r_max]
+    
+    if ignore_closest:
+        param_stations = param_stations.loc[1:,:]
 
     return param_stations
     
@@ -225,18 +243,20 @@ def create_model_for_site(predictors,site):
     test_indx = range(int(num_known*.75),num_known)
     
 
+    '''
     # linear model
     import sklearn.linear_model
     model = sklearn.linear_model.LinearRegression()
     model.fit(known_x[train_indx,:], known_y[train_indx])
-
     '''
+
+
     # neural network
     import sklearn.neural_network
     hl_size = (3,2)
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     model.fit(known_x[train_indx,:], known_y[train_indx])
-    '''
+ 
 
     
     # test the model
@@ -279,3 +299,195 @@ def fill_with_model(predictors,site,model):
     
     site[pd.isnull(site)] = predicted_y
     return site
+
+
+
+def plot_station_locs(aq_obj):
+    
+    if aq_obj is None:
+        print('No data here')
+        return
+    
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.basemap import Basemap
+    import numpy as np
+    
+    ###############################
+    # http://www.geophysique.be/2011/02/20/matplotlib-basemap-tutorial-09-drawing-circles/ 
+    
+    def shoot(lon, lat, azimuth, maxdist=None):
+        """Shooter Function
+        Original javascript on http://williams.best.vwh.net/gccalc.htm
+        Translated to python by Thomas Lecocq
+        """
+        glat1 = lat * np.pi / 180.
+        glon1 = lon * np.pi / 180.
+        s = maxdist / 1.852
+        faz = azimuth * np.pi / 180.
+     
+        EPS= 0.00000000005
+        if ((np.abs(np.cos(glat1))<EPS) and not (np.abs(np.sin(faz))<EPS)):
+            alert("Only N-S courses are meaningful, starting at a pole!")
+     
+        a=6378.13/1.852
+        f=1/298.257223563
+        r = 1 - f
+        tu = r * np.tan(glat1)
+        sf = np.sin(faz)
+        cf = np.cos(faz)
+        if (cf==0):
+            b=0.
+        else:
+            b=2. * np.arctan2 (tu, cf)
+     
+        cu = 1. / np.sqrt(1 + tu * tu)
+        su = tu * cu
+        sa = cu * sf
+        c2a = 1 - sa * sa
+        x = 1. + np.sqrt(1. + c2a * (1. / (r * r) - 1.))
+        x = (x - 2.) / x
+        c = 1. - x
+        c = (x * x / 4. + 1.) / c
+        d = (0.375 * x * x - 1.) * x
+        tu = s / (r * a * c)
+        y = tu
+        c = y + 1
+        while (np.abs (y - c) > EPS):
+     
+            sy = np.sin(y)
+            cy = np.cos(y)
+            cz = np.cos(b + y)
+            e = 2. * cz * cz - 1.
+            c = y
+            x = e * cy
+            y = e + e - 1.
+            y = (((sy * sy * 4. - 3.) * y * cz * d / 6. + x) *
+                  d / 4. - cz) * sy * d + tu
+     
+        b = cu * cy * cf - su * sy
+        c = r * np.sqrt(sa * sa + b * b)
+        d = su * cy + cu * sy * cf
+        glat2 = (np.arctan2(d, c) + np.pi) % (2*np.pi) - np.pi
+        c = cu * cy - su * sy * cf
+        x = np.arctan2(sy * sf, c)
+        c = ((-3. * c2a + 4.) * f + 4.) * c2a * f / 16.
+        d = ((e * cy * c + cz) * sy * c + y) * sa
+        glon2 = ((glon1 + x - (1. - c) * d * f + np.pi) % (2*np.pi)) - np.pi    
+     
+        baz = (np.arctan2(sa, b) + np.pi) % (2 * np.pi)
+     
+        glon2 *= 180./np.pi
+        glat2 *= 180./np.pi
+        baz *= 180./np.pi
+     
+        return (glon2, glat2, baz)
+    
+    def equi(m, centerlon, centerlat, radius, *args, **kwargs):
+        glon1 = centerlon
+        glat1 = centerlat
+        X = []
+        Y = []
+        for azimuth in range(0, 360):
+            glon2, glat2, baz = shoot(glon1, glat1, azimuth, radius)
+            X.append(glon2)
+            Y.append(glat2)
+        X.append(X[0])
+        Y.append(Y[0])
+     
+        #m.plot(X,Y,**kwargs) #Should work, but doesn't...
+        X,Y = m(X,Y)
+        plt.plot(X,Y,**kwargs)
+        
+    #######################################
+    
+    # "unpack" data from air quality object
+    #print(aq_obj.monitor_info)
+    monitor_info = aq_obj.monitor_info
+    my_lon = aq_obj.lat_lon[1]
+    my_lat = aq_obj.lat_lon[0]
+    r_max = aq_obj.r_max
+    param_code = aq_obj.param
+    #site_name = aq_obj.site_name
+    
+    num_stations = len(aq_obj.station_list)
+    
+    # create colors to correspond to each of the stations
+    RGB_tuples = [(x/num_stations, (1-x/num_stations),.5) for x in range(0,num_stations)]
+    color_dict = {}
+    for x in range(0,num_stations):
+        color_dict[aq_obj.station_list.index[x]] = RGB_tuples[x]
+    
+    # set viewing window for map plot
+    scale_factor = 60.0 # lat/lon coords to show from center point per km of r_max
+    left_lim = my_lon-r_max/scale_factor
+    right_lim = my_lon+r_max/scale_factor
+    bottom_lim = my_lat-r_max/scale_factor
+    top_lim = my_lat+r_max/scale_factor
+    
+    
+    fig = plt.figure(figsize=(20, 12), facecolor='w')    
+    
+    plt.subplot(1,2,1)
+    m = Basemap(projection='merc',resolution='c',lat_0=my_lat,lon_0=my_lon,llcrnrlon=left_lim,llcrnrlat=bottom_lim,urcrnrlon=right_lim,urcrnrlat=top_lim)
+    m.shadedrelief()
+    m.drawstates()
+    m.drawcountries()
+    m.drawrivers()
+    m.drawcoastlines()
+    
+    # plot each EPA site on the map, and connect it to the soiling station with a line whose width is proportional to the weight
+    for i in range(0,len(aq_obj.station_list)):
+        
+        plt.subplot(1,2,1)
+        (x,y) = m([aq_obj.station_list.iloc[i]['Longitude'],my_lon],[aq_obj.station_list.iloc[i]['Latitude'],my_lat])
+        m.plot(x,y,color = RGB_tuples[i])
+        
+        (x,y) = m(aq_obj.station_list.iloc[i]['Longitude'],aq_obj.station_list.iloc[i]['Latitude'])
+        #m.plot(x,y,'o',color = RGB_tuples[i])        
+        plt.text(x,y,str(i))
+        
+    # finish the map plot by putting the soiling station loc and radius on there
+    plt.subplot(1,2,1)
+    (x,y) = m(my_lon,my_lat)
+    m.plot(x,y,'kx',markersize=20,lw=3)
+    equi(m, my_lon, my_lat, r_max,color='k')        
+    plt.title('Found '+str(num_stations)+' acceptable EPA '+str(param_code)+' stations within '+str(r_max)+' km')        
+    plt.show()
+    
+    '''
+    # readings for all the stations
+#    ax=plt.subplot(2,3,2)
+#    print(aq_obj.station_readings)
+#    for station in aq_obj.station_readings.columns.values:
+#        ax.plot(aq_obj.station_readings[station],'x-',label=station)
+#    ax.set_ylabel('Station Reading')
+#    plt.show()    
+    print(color_dict)
+    # weights for all the stations
+    ax=plt.subplot(2,2,2)
+    #print(aq_obj.station_weights)
+    for station in aq_obj.station_weights.columns.values:
+        relative_weights = aq_obj.station_weights[station]/aq_obj.station_weights.sum(axis=1)*100
+        #print('Here are the relative weights:')
+        #print(relative_weights)
+        ax.plot(relative_weights,'x-',label=station,color = color_dict[station])
+    ax.set_ylabel('Station Weight [%]')
+    ax.set_xlabel('Distance [km]')
+    plt.show()  
+    
+    # plot each station reading profile
+    for station in aq_obj.station_readings.columns.values:
+        plt.subplot(2,2,4)
+        plt.plot(aq_obj.station_readings[station],'x-',label=station,color = color_dict[station])
+    plt.show()    
+        
+    # plot averaged value
+    plt.subplot(2,2,4)
+    plt.plot(aq_obj.daily_average,'.-',label='Weighted Average',lw=2,color='k')
+    plt.ylabel('Concentration')
+    #plt.legend()
+    plt.show()
+    '''
+
+    
+    return fig

@@ -17,7 +17,7 @@ if ~('all_data' in locals()):
 
 
 latlon = (39.9526, -75.1652)
-r_max = 200
+r_max = 300
 
 start_date = '2011-01-01'
 end_date = '2015-12-31'
@@ -76,7 +76,10 @@ ax_f.matshow(filled_bad.transpose(),aspect='auto')
 plt.matshow(filled_all.transpose(),aspect='auto')
 plt.xlabel('Day')
 plt.ylabel('Station')
+
+'''
 missing_t = is_missing.transpose()
+
 ci=0
 for column in missing_t: # this is very bad
     ri = 0
@@ -86,3 +89,5 @@ for column in missing_t: # this is very bad
             plt.plot(ci,ri,'.',color=None,markersize=2,markeredgecolor='r')
         ri = ri+1
     ci=ci+1    
+'''
+
