@@ -18,7 +18,7 @@ if ~('all_data_c' in locals()):
 all_data = all_data_c.copy()
 
 latlon = (34.1522, -118.2437)
-r_max = 50
+r_max = 100
 
 start_date = '2011-01-01'
 end_date = '2013-06-30'
@@ -27,8 +27,10 @@ end_date = '2013-06-30'
 stations = aq.identify_nearby_stations(latlon,r_max,all_data.copy())
 stations = aq.addon_stationid(stations)
 stations = aq.remove_dup_stations(stations)
+print(stations)
 
 stations = aq.create_station_weights(stations)
+print(stations)
 
 # plot these stations on a map
 #aq.plot_station_locs(stations)
@@ -37,22 +39,25 @@ orig = pd.DataFrame(columns=stations.index.copy())
 
 # for each nearby station, fill in missing data
 composite_data = pd.DataFrame()
-for i in range(0,len(stations)):
+#for i in range(0,len(stations)):
+for station in stations.index:
 
     station_obj = None
     
-    station_obj =aq.aq_station(stations.index[i])
-    station_obj.latlon = (stations['Latitude'][i],stations['Longitude'][i])
+    station_obj =aq.aq_station(station)
+    station_obj.latlon = (stations.loc[station,'Latitude'],stations.loc[station,'Longitude'])
     station_obj.start_date = start_date
     station_obj.end_date = end_date
     station_obj.get_station_data(r_max,all_data.copy())
-    orig[stations.index[i]] = station_obj.nearby_data_df.iloc[:,0].copy()
+    orig.loc[:,station] = station_obj.this_station.copy()
     station_obj.create_model()
     station_obj.run_model()
     
-    composite_data.loc[:,stations.index[i]] = station_obj.composite_data.rename(stations.index[i]).copy()
+    composite_data.loc[:,station] = station_obj.composite_data.rename(station).copy()
     
+data = aq.spatial_interp(composite_data,stations)   
+aq.final_big_plot(data,orig,composite_data,stations)
+
 aq.matrix_val_plot(orig)
 aq.matrix_val_plot(composite_data)
 
-data = aq.spatial_interp(composite_data,stations)

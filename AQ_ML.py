@@ -50,24 +50,37 @@ class aq_station:
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
         self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy()
         fig = matrix_val_plot(self.nearby_data_df.copy())
-        self.nearby_data_df = self.nearby_data_df.iloc[:,1:]
+        fig.suptitle('Getting station data. Here is all nearby data AND the known data (first row).')
+        fig.show()
+        self.nearby_data_df = self.nearby_data_df.iloc[:,1:].copy()
+        fig2 = matrix_val_plot(self.nearby_data_df.copy())
+        fig2.suptitle('Here is JUST the nearby data.')
+        fig2.show()
         
     def create_model(self):
-        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)
+        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)        
+        self.gs = fill_missing_predictors(self.gs)
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.matshow(self.gs.copy().transpose(),aspect='auto')
         ax.set_yticklabels(self.gs.columns.values)
         ax.set_yticks(range(0,len(self.gs.columns.values)))
-        self.gs = fill_missing_predictors(self.gs)
+        fig.suptitle('Creating a model. These are the "good stations".')
+        fig.show()
         self.model = create_model_for_site(self.gs,self.this_station)
         
     def run_model(self):
+        plt.figure()
+        plt.plot(self.this_station.copy(),'x',markersize=5)
+        plt.title('Original')
+        plt.show()
+        
         self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
         
         plt.figure()
         plt.plot(self.this_station.copy(),'x',markersize=5)
         plt.plot(self.composite_data)
+        plt.title('Filled in')
         plt.show()
 
 
@@ -230,13 +243,19 @@ def split_fill_unfill_stations(df):
             
     return good_stations, bad_stations
     
+# fill in missing predictor values, keeping it as a df
 def fill_missing_predictors(predictors):    
+    
+    print(type(predictors))
     
     import sklearn.preprocessing
     imp = sklearn.preprocessing.Imputer(missing_values='NaN', strategy='mean', axis=0)
-    predictors = imp.fit_transform(predictors)
+    predictors_filled = imp.fit_transform(predictors).copy()
+    predictors_filled_df = pd.DataFrame(index=predictors.index,columns=predictors.columns,data=predictors_filled)
     
-    return predictors
+    print(type(predictors_filled_df))
+    
+    return predictors_filled_df
     
 # based on which values for the site are available, split up predictors/known
 # into known and unknown
@@ -248,9 +267,9 @@ def split_known_unknown_rows(predictors,site):
     need_out_vals = ~np.isnan(site)
     need_out_vals = np.where(need_out_vals==False)[0]
     
-    known_x = predictors[have_out_vals,:]
-    known_y = site[have_out_vals]
-    unknown_x = predictors[need_out_vals,:]
+    known_x = predictors.iloc[have_out_vals,:].copy()
+    known_y = site[have_out_vals].copy()
+    unknown_x = predictors.iloc[need_out_vals,:].copy()
     
     return known_x,known_y,unknown_x
     
@@ -263,9 +282,7 @@ def create_model_for_site(predictors,site):
     
     # shuffle rows
     from sklearn.utils import shuffle
-    known_x_noshuffle = known_x
-    known_y_noshuffle = known_y
-    known_x,known_y = shuffle(known_x,known_y)
+    known_x,known_y = shuffle(known_x.copy(),known_y.copy())
     known_y = known_y.ravel()
     
     # split known into test/train
@@ -277,7 +294,7 @@ def create_model_for_site(predictors,site):
     # linear model
     import sklearn.linear_model
     model = sklearn.linear_model.LinearRegression()
-    model.fit(known_x[train_indx,:], known_y[train_indx])
+    model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
 
 
     '''
@@ -290,8 +307,8 @@ def create_model_for_site(predictors,site):
 
     
     # test the model
-    model_predicted = model.predict(known_x[test_indx])
-    model_known_predicted = model.predict(known_x[train_indx])
+    model_predicted = model.predict(known_x.iloc[test_indx])
+    model_known_predicted = model.predict(known_x.iloc[train_indx])
     
     # r2 score
     from sklearn.metrics import r2_score
@@ -322,8 +339,10 @@ def fill_with_model(predictors,site,model):
     predicted_y = model.predict(unknown_x)
         
     # replace missing with the simulated, returning the composite
-    composite_series = site.copy()
+    composite_series = site.copy() # start with site data
+    print(composite_series)
     composite_series[pd.isnull(site)] = predicted_y.copy()
+    print(composite_series)
     return composite_series
     
     
@@ -366,15 +385,31 @@ def spatial_interp(nearby_data,nearby_metadata):
             if pd.notnull(nearby_data.loc[date,station]):
                 weights_sum = weights_sum + nearby_metadata.loc[station,'weight']
                 values_sum = values_sum + nearby_data.loc[date,station]*nearby_metadata.loc[station,'weight']
-            
-            #station_weights.loc[day,monitor_info[i]['station_id']] = monitor_info[i]['Weight']
-            
+
         if weights_sum is not 0: # avoid dividing by zero--if no data for any of them, keep it as NaN
             data[date] = values_sum/weights_sum
         else:
             data[date] = np.nan
             
     return data
+    
+    
+def final_big_plot(data,orig,composite,nearby_metadata):
+    fig = plt.figure(figsize=(14,7))
+    ax = fig.add_subplot(111)
+    
+    weights = nearby_metadata['weight']
+    w_lims = (weights.min(),weights.max())
+    w_range = w_lims[1] - w_lims[0]
+    
+    for station in nearby_metadata.index:
+        print(station)
+        w = nearby_metadata.loc[station,'weight']
+        p = (w-w_lims[0])/w_range
+        ax.plot(orig.loc[:,station],'o',color=(p,0,0))
+        ax.plot(composite.loc[:,station],'--',lw=1,color=(p,0,0))
+        
+    ax.plot(data,color='b',lw=2)
     
 
 # plot each station on a basemap
