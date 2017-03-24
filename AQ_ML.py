@@ -10,10 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 # some constants
 R_earth =  6371.0 # [km]
@@ -91,11 +91,10 @@ def lat_lon_dist(point1,point2):
     
     return d
     
+# look at data from an EPA station and guess if it's on the 1, 3, or 6 day schedule
 def identify_sampling_rate(series):
     
     is_nan = pd.isnull(series)
-    
-    
         
     good_dates = series.index[is_nan==False]
     early = pd.to_datetime(good_dates[1:])
@@ -326,6 +325,57 @@ def fill_with_model(predictors,site,model):
     composite_series = site.copy()
     composite_series[pd.isnull(site)] = predicted_y.copy()
     return composite_series
+    
+    
+# once nearby stations have been picked, add on a column of their weights (for
+# the spatial interpolation algorithm)
+def create_station_weights(nearby_metadata):
+    
+    # determine the weighting for the stations
+    station_weights = pd.Series(index=nearby_metadata.index)
+    num_stations = len(nearby_metadata)
+    for station in nearby_metadata.index:
+        # average distance between this site and others
+        total_dist = 0
+        for other_station in nearby_metadata.index:
+            if station != other_station:
+                dist_between_stations = lat_lon_dist([nearby_metadata.loc[station]['Latitude'],nearby_metadata.loc[station]['Longitude']],[nearby_metadata.loc[other_station]['Latitude'],nearby_metadata.loc[other_station]['Longitude']])
+                total_dist = total_dist + dist_between_stations        
+            # average distance between this and other stations
+            r_jk_bar = total_dist/(num_stations-1)
+        
+        CW_ijk = 1/float(num_stations) + r_jk_bar/nearby_metadata.loc[station]['Distance']    
+        R_ij = (1/nearby_metadata.loc[station]['Distance'] )**2    
+        station_weights[station] = R_ij * CW_ijk
+        
+    nearby_metadata['weight'] = station_weights
+    
+    return nearby_metadata
+
+# take a df of nearby data, and metadata df that has station weights, to interp
+def spatial_interp(nearby_data,nearby_metadata):
+        
+    dates = nearby_data.index
+    data = pd.Series(index=dates)
+    
+    # perform weighted average of stations for this day 
+    for date in dates:
+        weights_sum = 0
+        values_sum = 0
+        for station in nearby_metadata.index:
+            if pd.notnull(nearby_data.loc[date,station]):
+                weights_sum = weights_sum + nearby_metadata.loc[station,'weight']
+                values_sum = values_sum + nearby_data.loc[date,station]*nearby_metadata.loc[station,'weight']
+            
+            #station_weights.loc[day,monitor_info[i]['station_id']] = monitor_info[i]['Weight']
+            
+        if weights_sum is not 0: # avoid dividing by zero--if no data for any of them, keep it as NaN
+            data[date] = values_sum/weights_sum
+        else:
+            data[date] = np.nan
+            
+    return data
+    
 
 # plot each station on a basemap
 def plot_station_locs(stations):

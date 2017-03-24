@@ -17,21 +17,23 @@ if ~('all_data_c' in locals()):
 
 all_data = all_data_c.copy()
 
-latlon = (34.0522, -118.2437)
+latlon = (34.1522, -118.2437)
 r_max = 50
 
 start_date = '2011-01-01'
 end_date = '2013-06-30'
 
-# see which EPA stations are nearby the desired point
-station_data = pd.DataFrame(index=pd.date_range(start_date,end_date,freq='1D').date)
+# this will store the metadata for each station that'll be used
 stations = aq.identify_nearby_stations(latlon,r_max,all_data.copy())
 stations = aq.addon_stationid(stations)
 stations = aq.remove_dup_stations(stations)
 
-aq.plot_station_locs(stations)
+stations = aq.create_station_weights(stations)
 
-orig = pd.DataFrame(columns=stations.index)
+# plot these stations on a map
+#aq.plot_station_locs(stations)
+
+orig = pd.DataFrame(columns=stations.index.copy())
 
 # for each nearby station, fill in missing data
 composite_data = pd.DataFrame()
@@ -52,3 +54,5 @@ for i in range(0,len(stations)):
     
 aq.matrix_val_plot(orig)
 aq.matrix_val_plot(composite_data)
+
+data = aq.spatial_interp(composite_data,stations)
