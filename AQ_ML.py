@@ -31,7 +31,7 @@ def matrix_val_plot(df,fig=None):
 
 # class for a station that'll have data imputed
 class aq_station:
-    def __init__(self,station_id):
+    def __init__(self,station_id,ignoring=None):
         self.station_data_series = pd.Series()
         self.nearby_stations = pd.DataFrame()
         self.gs = pd.DataFrame()
@@ -42,20 +42,22 @@ class aq_station:
         self.station_id = station_id
         self.start_date = None
         self.end_date = None
+        self.ignoring=ignoring
         
     def get_station_data(self,r_max,df):
         self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
+        if self.ignoring is not None:
+            print('Removing station '+self.ignoring+' from the metadata dataframe. Now, it is:')
+            self.nearby_stations = self.nearby_stations[self.nearby_stations.index!=self.ignoring].copy()
+            print(self.nearby_stations)
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
         self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy()
         fig = matrix_val_plot(self.nearby_data_df.copy())
         fig.suptitle('Getting station data. Here is all nearby data AND the known data (first row).')
         fig.show()
         self.nearby_data_df = self.nearby_data_df.iloc[:,1:].copy()
-        fig2 = matrix_val_plot(self.nearby_data_df.copy())
-        fig2.suptitle('Here is JUST the nearby data.')
-        fig2.show()
         
     def create_model(self):
         self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)        
@@ -69,14 +71,8 @@ class aq_station:
         fig.show()
         self.model = create_model_for_site(self.gs,self.this_station)
         
-    def run_model(self):
-        plt.figure()
-        plt.plot(self.this_station.copy(),'x',markersize=5)
-        plt.title('Original')
-        plt.show()
-        
-        self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
-        
+    def run_model(self):        
+        self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)        
         plt.figure()
         plt.plot(self.this_station.copy(),'x',markersize=5)
         plt.plot(self.composite_data)
@@ -325,6 +321,8 @@ def create_model_for_site(predictors,site):
     plt.legend(loc=4)
     plt.title(str(r2_predicted)+', '+str(r2_known_predicted))
     plt.show()
+    
+    print(str(r2_predicted)+', '+str(r2_known_predicted))
         
     return model
 
@@ -340,9 +338,7 @@ def fill_with_model(predictors,site,model):
         
     # replace missing with the simulated, returning the composite
     composite_series = site.copy() # start with site data
-    print(composite_series)
     composite_series[pd.isnull(site)] = predicted_y.copy()
-    print(composite_series)
     return composite_series
     
     
@@ -393,7 +389,8 @@ def spatial_interp(nearby_data,nearby_metadata):
             
     return data
     
-    
+# plot the original and composite data for each nearby station as well as the 
+# interpolated value
 def final_big_plot(data,orig,composite,nearby_metadata):
     fig = plt.figure(figsize=(14,7))
     ax = fig.add_subplot(111)
@@ -403,13 +400,15 @@ def final_big_plot(data,orig,composite,nearby_metadata):
     w_range = w_lims[1] - w_lims[0]
     
     for station in nearby_metadata.index:
-        print(station)
         w = nearby_metadata.loc[station,'weight']
         p = (w-w_lims[0])/w_range
         ax.plot(orig.loc[:,station],'o',color=(p,0,0))
         ax.plot(composite.loc[:,station],'--',lw=1,color=(p,0,0))
         
     ax.plot(data,color='b',lw=2)
+    
+    
+
     
 
 # plot each station on a basemap
@@ -546,11 +545,90 @@ def plot_station_locs(stations):
     # plot each EPA site on the map, and connect it to the soiling station with a line whose width is proportional to the weight
     for i in range(0,num_stations):
         
-        (x,y) = m([stations.iloc[i]['Longitude'],my_lon],[stations.iloc[i]['Latitude'],my_lat])
-        m.plot(x,y,color = RGB_tuples[i])
+        (x,y) = m(stations.iloc[i]['Longitude'],stations.iloc[i]['Latitude'])
+        m.plot(x,y,'o',color = RGB_tuples[i])
         
         (x,y) = m(stations.iloc[i]['Longitude'],stations.iloc[i]['Latitude'])
         plt.text(x,y,stations.index[i])
 
     
-    return fig
+    return fig    
+    
+# do everything to get air quality data
+def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=False):
+    
+    # this will store the metadata for each station that'll be used
+    stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy())
+    stations = addon_stationid(stations)
+    stations = remove_dup_stations(stations)
+    print(stations)
+    
+    # get rid of the closest station if you want to use that for validation
+    # also save its reading so you can compare later
+    closest = None # name of the closest station to ignore
+    if ignore_closest:
+        closest = stations.index[0]
+        print(closest)
+        
+        closest_obj = aq_station(closest)
+        closest_obj.latlon = (stations.loc[closest,'Latitude'],stations.loc[closest,'Longitude'])
+        closest_obj.start_date = start_date
+        closest_obj.end_date = end_date
+        closest_obj.get_station_data(r_max_ML,all_data.copy())
+        
+        target_data = closest_obj.this_station
+        
+        stations = stations.iloc[1:,:]
+        
+    print(stations)
+    
+    stations = create_station_weights(stations)
+    
+    # plot these stations on a map
+    plot_station_locs(stations)
+    
+    orig = pd.DataFrame(columns=stations.index.copy())
+    
+    # for each nearby station, fill in missing data
+    composite_data = pd.DataFrame()
+    for station in stations.index:
+    
+        station_obj = None
+        
+        station_obj =aq_station(station,ignoring=closest)
+        station_obj.latlon = (stations.loc[station,'Latitude'],stations.loc[station,'Longitude'])
+        station_obj.start_date = start_date
+        station_obj.end_date = end_date
+        station_obj.get_station_data(r_max_ML,all_data.copy())
+        orig.loc[:,station] = station_obj.this_station.copy()
+        station_obj.create_model()
+        station_obj.run_model()
+        
+        composite_data.loc[:,station] = station_obj.composite_data.rename(station).copy()
+        
+    data = spatial_interp(composite_data,stations)   
+    final_big_plot(data,orig,composite_data,stations)
+    
+    matrix_val_plot(orig)
+    matrix_val_plot(composite_data)
+    
+    if ignore_closest:
+        
+        # both time series
+        plt.figure()
+        plt.plot(data,label='predicted')
+        plt.plot(target_data,'.-',label='target')
+        plt.legend()
+        plt.show()
+        
+        # one against the other
+        plt.figure()
+        plt.scatter(target_data,data)
+        plt.plot([0,0],[data.max(),data.max()])
+        plt.ylabel('Predicted')
+        plt.xlabel('Target')
+        plt.show()
+        
+        return data, target_data
+    else:
+        return data
