@@ -11,83 +11,36 @@ import matplotlib.pyplot as plt
 #import numpy as np
 
 #station_df = pd.read_csv(aq.station_df_path)
-if ~('all_data' in locals()):
-    all_data = pd.read_csv(aq.all_data_path,usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean','Parameter Code','Latitude','Longitude'])
-    all_data = all_data.rename(columns={'Site Num':'Site Number'})
+if ~('all_data_c' in locals()):
+    all_data_c = pd.read_csv(aq.all_data_path,usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean','Parameter Code','Latitude','Longitude'])
+    all_data_c = all_data_c.rename(columns={'Site Num':'Site Number'})
 
+all_data = all_data_c.copy()
 
-latlon = (39.9526, -75.1652)
-r_max = 300
+latlon = (34.0522, -118.2437)
+r_max = 50
 
 start_date = '2011-01-01'
-end_date = '2015-12-31'
+end_date = '2013-06-30'
 
+# see which EPA stations are nearby the desired point
 station_data = pd.DataFrame(index=pd.date_range(start_date,end_date,freq='1D').date)
-
-stations = aq.identify_nearby_stations(latlon,r_max,all_data)
+stations = aq.identify_nearby_stations(latlon,r_max,all_data.copy())
 stations = aq.addon_stationid(stations)
 stations = aq.remove_dup_stations(stations)
 
+# for each nearby station, fill in missing data
+composite_data = pd.DataFrame()
+for i in range(0,len(stations)):
 
-
-
-nearby_data = aq.extract_nearby_values(stations,all_data,start_date,end_date)
-
-is_missing = pd.isnull(nearby_data)
-
-# split up the stations in to good stations (enough data) and bad ones (to be imputed)
-gs,bs = aq.split_fill_unfill_stations(nearby_data)
-
-save_bs = tuple([bs]) # WHY IS THIS STILL CHANGING??
-
-# initialize df that'll have the composite data
-filled_all = nearby_data
-plt.matshow(filled_all.transpose(),aspect='auto')
-
-# replace missing data in predictors (won't be too many of these)
-gs = aq.fill_missing_predictors(gs)
-
-# show the good and bad stations
-fig = plt.figure()
-ax_g = fig.add_subplot(2,1,1)
-ax_g.matshow(gs.transpose())
-ax_b = fig.add_subplot(2,1,2)
-ax_b.matshow(bs.transpose())
-
-filled_bad = pd.DataFrame()
-
-# fill in missing data in each "bad column"
-for column in bs:
-    col = bs[column]
-    col_vals = pd.Series(index=col.index,data=col.values)
-    model = aq.create_model_for_site(gs,col_vals)
-    filled = aq.fill_with_model(gs,col_vals,model)
-    filled_bad = pd.concat([filled_bad,filled],axis=1)
+    station_obj = None
     
-    filled_all[col.name] = filled
+    station_obj =aq.aq_station(stations.index[i])
+    station_obj.latlon = (stations['Latitude'][i],stations['Longitude'][i])
+    station_obj.start_date = start_date
+    station_obj.end_date = end_date
+    station_obj.get_station_data(r_max,all_data.copy())
+    station_obj.create_model()
+    station_obj.run_model()
     
-# show the filled/unfilled data
-fig2 = plt.figure()
-ax_u = fig2.add_subplot(2,1,1)
-ax_u.matshow(save_bs[0].transpose(),aspect='auto')
-ax_f = fig2.add_subplot(2,1,2)
-ax_f.matshow(filled_bad.transpose(),aspect='auto')
-
-plt.matshow(filled_all.transpose(),aspect='auto')
-plt.xlabel('Day')
-plt.ylabel('Station')
-
-'''
-missing_t = is_missing.transpose()
-
-ci=0
-for column in missing_t: # this is very bad
-    ri = 0
-    col_vals = missing_t[column]
-    for row in col_vals:
-        if row == True:
-            plt.plot(ci,ri,'.',color=None,markersize=2,markeredgecolor='r')
-        ri = ri+1
-    ci=ci+1    
-'''
-
+    composite_data.loc[:,stations.index[i]] = station_obj.composite_data.rename(stations.index[i]).copy()

@@ -32,6 +32,8 @@ class aq_station:
     def __init__(self,station_id):
         self.station_data_series = pd.Series()
         self.nearby_stations = pd.DataFrame()
+        self.gs = pd.DataFrame()
+        self.bs = pd.DataFrame()
         self.nearby_data_df = pd.DataFrame() # each column is measurements from a different station
         self.station_info = pd.DataFrame()
         self.latlon = None
@@ -41,7 +43,26 @@ class aq_station:
         
     def get_station_data(self,r_max,df):
         self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df)
+        self.nearby_stations = addon_stationid(self.nearby_stations)
+        self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
+        self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy()
+        plt.matshow(self.nearby_data_df.copy().transpose(),aspect='auto')
+        self.nearby_data_df = self.nearby_data_df.iloc[:,1:]
+        
+    def create_model(self):
+        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)
+        plt.matshow(self.gs.transpose(),aspect='auto')
+        self.gs = fill_missing_predictors(self.gs)
+        self.model = create_model_for_site(self.gs,self.this_station)
+        
+    def run_model(self):
+        self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
+        
+        plt.figure()
+        plt.plot(self.this_station.copy(),'x',markersize=5)
+        plt.plot(self.composite_data)
+        plt.show()
 
 
 
@@ -124,8 +145,7 @@ def identify_nearby_stations(latlon,r_max,df,ignore_closest=False):
     # get rid of stations that are far away
     param_stations = param_stations[param_stations['Distance']<=r_max]
     
-    if ignore_closest:
-        param_stations = param_stations.loc[1:,:]
+    
 
     return param_stations
     
@@ -141,11 +161,14 @@ def addon_stationid(df):
     return df
     
 # remove duplicate stations based on the station id (already created)
-def remove_dup_stations(param_stations):
+def remove_dup_stations(param_stations,ignore_closest=False):
     
     # make the IDS the index, and get rid of duplicates
     param_stations = param_stations.set_index('station_ids')
     param_stations = param_stations[~param_stations.index.duplicated(keep='first')]
+    
+    if ignore_closest:
+        param_stations = param_stations.iloc[1:,:]
 
     #print(param_stations)
     
@@ -188,12 +211,12 @@ def split_fill_unfill_stations(df):
         col_vals = df[column]
         #print(col_vals)
         rate = identify_sampling_rate(col_vals)
-        print(rate)
+        #print(rate)
         num_missing = len(col_vals[pd.isnull(col_vals)==True])
         portion_missing = float(num_missing)/float(len(col_vals))
-        print(num_missing,len(col_vals),portion_missing)
+        #print(num_missing,len(col_vals),portion_missing)
   
-        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.1)
+        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.2)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
         else:
@@ -243,20 +266,19 @@ def create_model_for_site(predictors,site):
     test_indx = range(int(num_known*.75),num_known)
     
 
-    '''
     # linear model
     import sklearn.linear_model
     model = sklearn.linear_model.LinearRegression()
     model.fit(known_x[train_indx,:], known_y[train_indx])
+
+
     '''
-
-
     # neural network
     import sklearn.neural_network
-    hl_size = (3,2)
+    hl_size = (2,2)
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     model.fit(known_x[train_indx,:], known_y[train_indx])
- 
+    '''
 
     
     # test the model
@@ -427,7 +449,6 @@ def plot_station_locs(aq_obj):
     
     fig = plt.figure(figsize=(20, 12), facecolor='w')    
     
-    plt.subplot(1,2,1)
     m = Basemap(projection='merc',resolution='c',lat_0=my_lat,lon_0=my_lon,llcrnrlon=left_lim,llcrnrlat=bottom_lim,urcrnrlon=right_lim,urcrnrlat=top_lim)
     m.shadedrelief()
     m.drawstates()
@@ -445,49 +466,6 @@ def plot_station_locs(aq_obj):
         (x,y) = m(aq_obj.station_list.iloc[i]['Longitude'],aq_obj.station_list.iloc[i]['Latitude'])
         #m.plot(x,y,'o',color = RGB_tuples[i])        
         plt.text(x,y,str(i))
-        
-    # finish the map plot by putting the soiling station loc and radius on there
-    plt.subplot(1,2,1)
-    (x,y) = m(my_lon,my_lat)
-    m.plot(x,y,'kx',markersize=20,lw=3)
-    equi(m, my_lon, my_lat, r_max,color='k')        
-    plt.title('Found '+str(num_stations)+' acceptable EPA '+str(param_code)+' stations within '+str(r_max)+' km')        
-    plt.show()
-    
-    '''
-    # readings for all the stations
-#    ax=plt.subplot(2,3,2)
-#    print(aq_obj.station_readings)
-#    for station in aq_obj.station_readings.columns.values:
-#        ax.plot(aq_obj.station_readings[station],'x-',label=station)
-#    ax.set_ylabel('Station Reading')
-#    plt.show()    
-    print(color_dict)
-    # weights for all the stations
-    ax=plt.subplot(2,2,2)
-    #print(aq_obj.station_weights)
-    for station in aq_obj.station_weights.columns.values:
-        relative_weights = aq_obj.station_weights[station]/aq_obj.station_weights.sum(axis=1)*100
-        #print('Here are the relative weights:')
-        #print(relative_weights)
-        ax.plot(relative_weights,'x-',label=station,color = color_dict[station])
-    ax.set_ylabel('Station Weight [%]')
-    ax.set_xlabel('Distance [km]')
-    plt.show()  
-    
-    # plot each station reading profile
-    for station in aq_obj.station_readings.columns.values:
-        plt.subplot(2,2,4)
-        plt.plot(aq_obj.station_readings[station],'x-',label=station,color = color_dict[station])
-    plt.show()    
-        
-    # plot averaged value
-    plt.subplot(2,2,4)
-    plt.plot(aq_obj.daily_average,'.-',label='Weighted Average',lw=2,color='k')
-    plt.ylabel('Concentration')
-    #plt.legend()
-    plt.show()
-    '''
 
     
     return fig
