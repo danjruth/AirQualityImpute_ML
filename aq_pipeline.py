@@ -29,6 +29,10 @@ stations = aq.identify_nearby_stations(latlon,r_max,all_data.copy())
 stations = aq.addon_stationid(stations)
 stations = aq.remove_dup_stations(stations)
 
+aq.plot_station_locs(stations)
+
+orig = pd.DataFrame(columns=stations.index)
+
 # for each nearby station, fill in missing data
 composite_data = pd.DataFrame()
 for i in range(0,len(stations)):
@@ -40,7 +44,11 @@ for i in range(0,len(stations)):
     station_obj.start_date = start_date
     station_obj.end_date = end_date
     station_obj.get_station_data(r_max,all_data.copy())
+    orig[stations.index[i]] = station_obj.nearby_data_df.iloc[:,0].copy()
     station_obj.create_model()
     station_obj.run_model()
     
     composite_data.loc[:,stations.index[i]] = station_obj.composite_data.rename(stations.index[i]).copy()
+    
+aq.matrix_val_plot(orig)
+aq.matrix_val_plot(composite_data)

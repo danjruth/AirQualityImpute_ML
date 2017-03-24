@@ -15,17 +15,19 @@ station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
 #all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
 all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
-#station_df = pd.read_csv()
-#all_data = pd.read_csv(,usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean'])
-#all_data = all_data.rename(columns={'Site Num':'Site Number'})
-
-
+# some constants
 R_earth =  6371.0 # [km]
 param_code = 81102
 
-
-    
-#station_df_2 = addon_stationid(station_df)
+# plot a matrix of nearby station values, labeling each station
+def matrix_val_plot(df,fig=None):
+    if fig==None:
+        fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.matshow(df.copy().transpose(),aspect='auto')
+    ax.set_yticklabels(df.columns.values)
+    ax.set_yticks(range(0,len(df.columns.values)))
+    return fig
 
 # class for a station that'll have data imputed
 class aq_station:
@@ -47,12 +49,16 @@ class aq_station:
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
         self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy()
-        plt.matshow(self.nearby_data_df.copy().transpose(),aspect='auto')
+        fig = matrix_val_plot(self.nearby_data_df.copy())
         self.nearby_data_df = self.nearby_data_df.iloc[:,1:]
         
     def create_model(self):
         self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)
-        plt.matshow(self.gs.transpose(),aspect='auto')
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.matshow(self.gs.copy().transpose(),aspect='auto')
+        ax.set_yticklabels(self.gs.columns.values)
+        ax.set_yticks(range(0,len(self.gs.columns.values)))
         self.gs = fill_missing_predictors(self.gs)
         self.model = create_model_for_site(self.gs,self.this_station)
         
@@ -202,20 +208,21 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
         
     return df
     
-    
+# for a given set of stations, separate the ones that are full enough and those that aren't
+# only the full ones will be used
 def split_fill_unfill_stations(df):
     
     good_stations = pd.DataFrame()
     bad_stations = pd.DataFrame()
+    
+    # look at each column (data for a given station) and see if it's good or bad
     for column in df:
         col_vals = df[column]
-        #print(col_vals)
         rate = identify_sampling_rate(col_vals)
-        #print(rate)
         num_missing = len(col_vals[pd.isnull(col_vals)==True])
         portion_missing = float(num_missing)/float(len(col_vals))
-        #print(num_missing,len(col_vals),portion_missing)
   
+        # criteria for using the site: mostly daily and not missing much
         enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.2)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
@@ -232,6 +239,8 @@ def fill_missing_predictors(predictors):
     
     return predictors
     
+# based on which values for the site are available, split up predictors/known
+# into known and unknown
 def split_known_unknown_rows(predictors,site):
     
     # split up known rows from unkown rows
@@ -246,7 +255,7 @@ def split_known_unknown_rows(predictors,site):
     
     return known_x,known_y,unknown_x
     
-  
+# given training data, create a model that'll be used to predict the missing data
 def create_model_for_site(predictors,site):
     
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
@@ -300,35 +309,26 @@ def create_model_for_site(predictors,site):
     plt.legend(loc=4)
     plt.title(str(r2_predicted)+', '+str(r2_known_predicted))
     plt.show()
-    plt.pause(1)
-    plt.show()
-    
-    #model = linear_model
-    
+        
     return model
 
-
+# use the model to fill the missing data, returning a "composite" series
 def fill_with_model(predictors,site,model):
     
     if model is None:
         return site
     
-    known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
-    
+    # split known/unknown, simulate
+    known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)    
     predicted_y = model.predict(unknown_x)
-    
-    print(predicted_y)
-    
-    site[pd.isnull(site)] = predicted_y
-    return site
+        
+    # replace missing with the simulated, returning the composite
+    composite_series = site.copy()
+    composite_series[pd.isnull(site)] = predicted_y.copy()
+    return composite_series
 
-
-
-def plot_station_locs(aq_obj):
-    
-    if aq_obj is None:
-        print('No data here')
-        return
+# plot each station on a basemap
+def plot_station_locs(stations):
     
     import matplotlib.pyplot as plt
     from mpl_toolkits.basemap import Basemap
@@ -424,20 +424,20 @@ def plot_station_locs(aq_obj):
     
     # "unpack" data from air quality object
     #print(aq_obj.monitor_info)
-    monitor_info = aq_obj.monitor_info
-    my_lon = aq_obj.lat_lon[1]
-    my_lat = aq_obj.lat_lon[0]
-    r_max = aq_obj.r_max
-    param_code = aq_obj.param
+    #monitor_info = aq_obj.monitor_info
+    my_lon = stations['Longitude'][0]
+    my_lat = stations['Latitude'][0]
+    r_max = 150
+    #param_code = aq_obj.param
     #site_name = aq_obj.site_name
     
-    num_stations = len(aq_obj.station_list)
+    num_stations = len(stations)
     
     # create colors to correspond to each of the stations
     RGB_tuples = [(x/num_stations, (1-x/num_stations),.5) for x in range(0,num_stations)]
     color_dict = {}
     for x in range(0,num_stations):
-        color_dict[aq_obj.station_list.index[x]] = RGB_tuples[x]
+        color_dict[stations.index[x]] = RGB_tuples[x]
     
     # set viewing window for map plot
     scale_factor = 60.0 # lat/lon coords to show from center point per km of r_max
@@ -456,16 +456,16 @@ def plot_station_locs(aq_obj):
     m.drawrivers()
     m.drawcoastlines()
     
+    plt.show()
+    
     # plot each EPA site on the map, and connect it to the soiling station with a line whose width is proportional to the weight
-    for i in range(0,len(aq_obj.station_list)):
+    for i in range(0,num_stations):
         
-        plt.subplot(1,2,1)
-        (x,y) = m([aq_obj.station_list.iloc[i]['Longitude'],my_lon],[aq_obj.station_list.iloc[i]['Latitude'],my_lat])
+        (x,y) = m([stations.iloc[i]['Longitude'],my_lon],[stations.iloc[i]['Latitude'],my_lat])
         m.plot(x,y,color = RGB_tuples[i])
         
-        (x,y) = m(aq_obj.station_list.iloc[i]['Longitude'],aq_obj.station_list.iloc[i]['Latitude'])
-        #m.plot(x,y,'o',color = RGB_tuples[i])        
-        plt.text(x,y,str(i))
+        (x,y) = m(stations.iloc[i]['Longitude'],stations.iloc[i]['Latitude'])
+        plt.text(x,y,stations.index[i])
 
     
     return fig
