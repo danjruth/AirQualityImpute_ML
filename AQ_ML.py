@@ -10,10 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 # some constants
 R_earth =  6371.0 # [km]
@@ -45,9 +45,11 @@ class aq_station:
         self.ignoring=ignoring
         
     def get_station_data(self,r_max,df):
+        print('Getting station data for a station')
         self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
+        print(self.nearby_stations)
         if self.ignoring is not None:
             self.nearby_stations = self.nearby_stations[self.nearby_stations.index!=self.ignoring].copy()
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
@@ -57,10 +59,15 @@ class aq_station:
 #        fig.show()
         self.nearby_data_df = self.nearby_data_df.iloc[:,1:].copy()
         
+        
     def create_model(self):
-        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)        
+        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)
+        if self.gs.empty:
+            print('its empty!!!')
+            self.model = None
+            return
         self.gs = fill_missing_predictors(self.gs)
-        fig = plt.figure()
+        fig = plt.figure()       
         ax = fig.add_subplot(111)
         ax.matshow(self.gs.copy().transpose(),aspect='auto')
         ax.set_yticklabels(self.gs.columns.values)
@@ -189,7 +196,7 @@ def remove_dup_stations(param_stations,ignore_closest=False):
 # pick out the values from stations nearby
 def extract_nearby_values(stations,all_data,start_date,end_date):
     
-    print('extracting!')
+    print('Extracting nearby values...')
         
     df = pd.DataFrame()
     
@@ -240,15 +247,19 @@ def split_fill_unfill_stations(df):
 # fill in missing predictor values, keeping it as a df
 def fill_missing_predictors(predictors):    
     
-    print(type(predictors))
+    print('Filling in the missing values from the predictors...')
     
+    print(predictors)
+    
+    print(predictors.empty)
+    if predictors.empty:
+        predictors = 0
+        
     import sklearn.preprocessing
     imp = sklearn.preprocessing.Imputer(missing_values='NaN', strategy='mean', axis=0)
     predictors_filled = imp.fit_transform(predictors).copy()
     predictors_filled_df = pd.DataFrame(index=predictors.index,columns=predictors.columns,data=predictors_filled)
-    
-    print(type(predictors_filled_df))
-    
+        
     return predictors_filled_df
     
 # based on which values for the site are available, split up predictors/known
@@ -335,6 +346,7 @@ def fill_with_model(predictors,site,model):
     # replace missing with the simulated, returning the composite
     composite_series = site.copy() # start with site data
     composite_series[pd.isnull(site)] = predicted_y.copy()
+    
     return composite_series
     
     
@@ -353,7 +365,10 @@ def create_station_weights(nearby_metadata):
                 dist_between_stations = lat_lon_dist([nearby_metadata.loc[station]['Latitude'],nearby_metadata.loc[station]['Longitude']],[nearby_metadata.loc[other_station]['Latitude'],nearby_metadata.loc[other_station]['Longitude']])
                 total_dist = total_dist + dist_between_stations        
             # average distance between this and other stations
-            r_jk_bar = total_dist/(num_stations-1)
+            if num_stations > 1:
+                r_jk_bar = total_dist/(num_stations-1)
+            else:
+                r_jk_bar = 0
         
         CW_ijk = 1/float(num_stations) + r_jk_bar/nearby_metadata.loc[station]['Distance']    
         R_ij = (1/nearby_metadata.loc[station]['Distance'] )**2    
@@ -362,6 +377,43 @@ def create_station_weights(nearby_metadata):
     nearby_metadata['weight'] = station_weights
     
     return nearby_metadata
+    
+# re-compute the station weights based on which stations have available data.
+# nearby_metadata is used to just take out the "available stations"
+def spatial_interp_variable_weights(nearby_data,nearby_metadata):
+    
+    print(nearby_metadata)
+    
+    dates = nearby_data.index
+    data = pd.Series(index=dates)
+    
+    # perform weighted average of stations for this day 
+    for date in dates:
+        
+        print(date)
+        
+        # get weights for this day
+        available_stations = list()
+        for station in nearby_data.columns:
+            if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index):
+                available_stations.append(station)
+        print(available_stations)
+        useful_metadata = nearby_metadata.copy().loc[available_stations,:]
+        useful_metadata = create_station_weights(useful_metadata)
+                
+        weights_sum = 0
+        values_sum = 0
+        for station in useful_metadata.index:
+            if pd.notnull(nearby_data.loc[date,station]):
+                weights_sum = weights_sum + useful_metadata.loc[station,'weight']
+                values_sum = values_sum + nearby_data.loc[date,station]*useful_metadata.loc[station,'weight']
+
+        if weights_sum is not 0: # avoid dividing by zero--if no data for any of them, keep it as NaN
+            data[date] = values_sum/weights_sum
+        else:
+            data[date] = np.nan
+            
+    return data
 
 # take a df of nearby data, and metadata df that has station weights, to interp
 def spatial_interp(nearby_data,nearby_metadata):
@@ -559,7 +611,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
     stations = remove_dup_stations(stations)
     print(stations)
     
-    # get rid of the closest station if you want to use that for validation
+    # get rid of the closest station if you want to use that for validation.
     # also save its reading so you can compare later
     closest = None # name of the closest station to ignore
     if ignore_closest:
@@ -572,13 +624,23 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         closest_obj.end_date = end_date
         closest_obj.get_station_data(r_max_ML,all_data.copy())
         
+        # store the "target data" for comparison
         target_data = closest_obj.this_station
         
+        # get rid of the closest station
         stations = stations.iloc[1:,:]
         
-    print(stations)
+        # try predicting the values without filling in missing ones with ML
+        results_noML = spatial_interp_variable_weights(closest_obj.nearby_data_df,stations)
+        plt.figure()
+        plt.plot(results_noML,label='results, no ML')
+        plt.plot(target_data,label='target')
+        plt.legend()
+        plt.show()
     
+    # metadata for stations, used in the spatial interpolation
     stations = create_station_weights(stations)
+    #print(stations)
     
     # plot these stations on a map
     plot_station_locs(stations)
@@ -602,29 +664,49 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         
         composite_data.loc[:,station] = station_obj.composite_data.rename(station).copy()
         
+    # using the composite dataset constructed above, perform the spatial interpolation algorithm
     data = spatial_interp(composite_data,stations)   
-    final_big_plot(data,orig,composite_data,stations)
     
+    # plot the predicted, original, and composite data
+    final_big_plot(data,orig,composite_data,stations)    
     matrix_val_plot(orig)
-    matrix_val_plot(composite_data)
+    matrix_val_plot(composite_data)    
     
+    # if the closest station was ignored (for validation purposes), plot that
+    # known data against the predicted data
     if ignore_closest:
         
         # both time series
         plt.figure()
         plt.plot(data,label='predicted')
+        plt.plot(results_noML,label='predicted, no ML')
         plt.plot(target_data,'.-',label='target')
         plt.legend()
         plt.show()
         
-        # one against the other
-        plt.figure()
-        plt.scatter(target_data,data)
-        plt.plot([0,0],[data.max(),data.max()])
-        plt.ylabel('Predicted')
-        plt.xlabel('Target')
-        plt.show()
+        from sklearn.metrics import r2_score
+        compare_df = pd.DataFrame()
+        compare_df['predicted'] = data
+        compare_df['target'] = target_data
+        compare_df['predicted_noML'] = results_noML
+        compare_df = compare_df[np.isfinite(compare_df['target'])]
+        r2 = r2_score(compare_df['predicted'],compare_df['target'])
+        print(r2)
         
-        return data, target_data
+        try:
+            # one against the other
+            plt.figure()
+            plt.scatter(compare_df['target'],compare_df['predicted'],label='with ML')
+            plt.scatter(compare_df['target'],compare_df['predicted_noML'],label='no ML')
+            plt.plot([0,0],[data.max(),data.max()])
+            plt.legend()
+            plt.ylabel('Predicted')
+            plt.xlabel('Target')
+            plt.show()
+        except:
+            print('error plotting')
+        
+        return data, target_data, results_noML
+    
     else:
         return data
