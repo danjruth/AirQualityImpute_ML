@@ -10,10 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 # some constants
 R_earth =  6371.0 # [km]
@@ -49,14 +49,12 @@ class aq_station:
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         if self.ignoring is not None:
-            print('Removing station '+self.ignoring+' from the metadata dataframe. Now, it is:')
             self.nearby_stations = self.nearby_stations[self.nearby_stations.index!=self.ignoring].copy()
-            print(self.nearby_stations)
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
         self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy()
-        fig = matrix_val_plot(self.nearby_data_df.copy())
-        fig.suptitle('Getting station data. Here is all nearby data AND the known data (first row).')
-        fig.show()
+#        fig = matrix_val_plot(self.nearby_data_df.copy())
+#        fig.suptitle('Getting station data. Here is all nearby data AND the known data (first row).')
+#        fig.show()
         self.nearby_data_df = self.nearby_data_df.iloc[:,1:].copy()
         
     def create_model(self):
@@ -72,12 +70,12 @@ class aq_station:
         self.model = create_model_for_site(self.gs,self.this_station)
         
     def run_model(self):        
-        self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)        
-        plt.figure()
-        plt.plot(self.this_station.copy(),'x',markersize=5)
-        plt.plot(self.composite_data)
-        plt.title('Filled in')
-        plt.show()
+        self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
+#        plt.figure()
+#        plt.plot(self.this_station.copy(),'x',markersize=5)
+#        plt.plot(self.composite_data)
+#        plt.title('Filled in')
+#        plt.show()
 
 
 
@@ -290,17 +288,15 @@ def create_model_for_site(predictors,site):
     # linear model
     import sklearn.linear_model
     model = sklearn.linear_model.LinearRegression()
-    model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
-
 
     '''
     # neural network
     import sklearn.neural_network
-    hl_size = (2,2)
+    hl_size = (2)
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
-    model.fit(known_x[train_indx,:], known_y[train_indx])
     '''
 
+    model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
     
     # test the model
     model_predicted = model.predict(known_x.iloc[test_indx])

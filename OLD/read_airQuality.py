@@ -662,7 +662,7 @@ def aq_method_plot(aq_obj):
     
     # "unpack" data from air quality object
     #print(aq_obj.monitor_info)
-    monitor_info = aq_obj.monitor_info
+    #monitor_info = aq_obj.monitor_info
     my_lon = aq_obj.lat_lon[1]
     my_lat = aq_obj.lat_lon[0]
     r_max = aq_obj.r_max
