@@ -17,11 +17,11 @@ if ~('all_data_c' in locals()):
 
 all_data = all_data_c.copy()
 
-latlon = (32.414344,-111.154544)
+latlon = (34.276362,-118.683757)
 r_max_interp = 50 # how far from latlon of interest should it look for stations?
-r_max_ML = 75 # for each station it finds, how far should it look aroud it in imputing the missing values?
+r_max_ML = 100 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
-start_date = '2012-01-01'
+start_date = '2013-01-01'
 end_date = '2015-06-30'
 
 data, target_data, results_noML = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=True)
@@ -44,3 +44,9 @@ r2 = r2_score(compare_df['predicted'],compare_df['target'])
 r2_noML = r2_score(compare_df['predicted_noML'],compare_df['target'])
 print('R squareds (with, without ML) are:')
 print(r2,r2_noML)
+
+plt.figure()
+plt.plot(data-target_data,label='error')
+plt.plot(results_noML-target_data,label='error, no ML')
+plt.legend()
+plt.show()

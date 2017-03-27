@@ -49,19 +49,19 @@ class aq_station:
         self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
-        print(self.nearby_stations)
+        #print(self.nearby_stations) # the closest station is not yet removed
         if self.ignoring is not None:
             self.nearby_stations = self.nearby_stations[self.nearby_stations.index!=self.ignoring].copy()
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
-        self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy()
+        self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy() # the first station in the df is the closest (AT the loc of interest)
 #        fig = matrix_val_plot(self.nearby_data_df.copy())
 #        fig.suptitle('Getting station data. Here is all nearby data AND the known data (first row).')
 #        fig.show()
-        self.nearby_data_df = self.nearby_data_df.iloc[:,1:].copy()
+        self.nearby_data_df = self.nearby_data_df.iloc[:,1:].copy() # get rid of the closest data: this is the target data, not used in training
         
         
     def create_model(self):
-        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df)
+        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df) # nearby_data_df does NOT include the station to predict
         if self.gs.empty:
             print('its empty!!!')
             self.model = None
@@ -132,18 +132,6 @@ def identify_sampling_rate(series):
     
     return estimated_rate
     
-    
-'''
-def identify_sampling_rate(station_id,all_data,start_date=None,end_date=None):
-    
-    all_data = addon_stationid(all_data)
-    station_data = all_data[all_data['station_ids']]
-    station_data = station_data['station_ids'==station_id]
-    station_data = station_data.set_index('Date Local')
-    
-    return station_data
-'''
-
 # with a given latlon and r_max, pick out stations within that radius from a df
 # with STATION DATA, not the metadata spreadsheet. This way we actually get 
 # sites that have data
@@ -249,9 +237,9 @@ def fill_missing_predictors(predictors):
     
     print('Filling in the missing values from the predictors...')
     
-    print(predictors)
+    #print(predictors)
     
-    print(predictors.empty)
+    #print(predictors.empty)
     if predictors.empty:
         predictors = 0
         
@@ -281,6 +269,8 @@ def split_known_unknown_rows(predictors,site):
 # given training data, create a model that'll be used to predict the missing data
 def create_model_for_site(predictors,site):
     
+    print('Creating a model for '+str(site.name))
+    
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
     if (len(known_y)<5 or len(unknown_x)<5):
         return None
@@ -295,7 +285,6 @@ def create_model_for_site(predictors,site):
     train_indx = range(0,int(num_known*.75))
     test_indx = range(int(num_known*.75),num_known)
     
-
     # linear model
     import sklearn.linear_model
     model = sklearn.linear_model.LinearRegression()
@@ -307,6 +296,7 @@ def create_model_for_site(predictors,site):
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     '''
 
+    # fit the model with the training data
     model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
     
     # test the model
@@ -382,7 +372,7 @@ def create_station_weights(nearby_metadata):
 # nearby_metadata is used to just take out the "available stations"
 def spatial_interp_variable_weights(nearby_data,nearby_metadata):
     
-    print(nearby_metadata)
+    #print(nearby_metadata)
     
     dates = nearby_data.index
     data = pd.Series(index=dates)
@@ -397,7 +387,7 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata):
         for station in nearby_data.columns:
             if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index):
                 available_stations.append(station)
-        print(available_stations)
+        #print(available_stations)
         useful_metadata = nearby_metadata.copy().loc[available_stations,:]
         useful_metadata = create_station_weights(useful_metadata)
                 
@@ -665,7 +655,8 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         composite_data.loc[:,station] = station_obj.composite_data.rename(station).copy()
         
     # using the composite dataset constructed above, perform the spatial interpolation algorithm
-    data = spatial_interp(composite_data,stations)   
+    #data = spatial_interp(composite_data,stations)   
+    data = spatial_interp_variable_weights(composite_data,stations)
     
     # plot the predicted, original, and composite data
     final_big_plot(data,orig,composite_data,stations)    
