@@ -10,10 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 # some constants
 R_earth =  6371.0 # [km]
@@ -296,7 +296,7 @@ def create_model_for_site(predictors,site):
 
     # neural network
     import sklearn.neural_network
-    hl_size = (3)
+    hl_size = (5)
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
@@ -323,7 +323,7 @@ def create_model_for_site(predictors,site):
         print('Using the linear model.')
         model = lin_model
     
-    # test the model    
+    # test the model on the training data now
     model_known_predicted = model.predict(known_x.iloc[train_indx])
     r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
     
@@ -618,7 +618,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
     stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy())
     stations = addon_stationid(stations)
     stations = remove_dup_stations(stations)
-    print(stations)
+    
     
     # get rid of the closest station if you want to use that for validation.
     # also save its reading so you can compare later
@@ -653,6 +653,8 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
     stations = create_station_weights(stations)
     #print(stations)
     
+    print(stations)
+    
     # plot these stations on a map
     plot_station_locs(stations)
     
@@ -676,7 +678,14 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         composite_data.loc[:,station] = station_obj.composite_data.rename(station).copy()
         
     # using the composite dataset constructed above, perform the spatial interpolation algorithm
-    data = spatial_interp(composite_data,stations)   
+    if composite_data.isnull().values.any():
+        print('Recalculating weights for each day...')
+        data = spatial_interp_variable_weights(composite_data,stations)
+    else:
+        print('No NaNs found, so using constant weights...')
+        data = spatial_interp(composite_data,stations)   
+        
+    
     #data = spatial_interp_variable_weights(composite_data,stations)
     
     # plot the predicted, original, and composite data
