@@ -10,10 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 #import pickle
 
-station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
+station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
+all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 # some constants
 R_earth =  6371.0 # [km]
@@ -269,6 +269,8 @@ def split_known_unknown_rows(predictors,site):
 # given training data, create a model that'll be used to predict the missing data
 def create_model_for_site(predictors,site):
     
+    from sklearn.metrics import r2_score
+    
     print('Creating a model for '+str(site.name))
     
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
@@ -287,25 +289,42 @@ def create_model_for_site(predictors,site):
     
     # linear model
     import sklearn.linear_model
-    model = sklearn.linear_model.LinearRegression()
+    lin_model = sklearn.linear_model.LinearRegression()
+    lin_model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
+    lin_model_predicted = lin_model.predict(known_x.iloc[test_indx])
+    r2_lin = r2_score(known_y[test_indx],lin_model_predicted)
 
-    '''
     # neural network
     import sklearn.neural_network
-    hl_size = (2)
+    hl_size = (3)
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
+    
     '''
+    # SVM
+    import sklearn.svm
+    model = sklearn.svm.SVR()
+    '''
+    
+    '''
+    import sklearn.tree
+    model = sklearn.tree.DecisionTreeRegressor(max_depth=3)
+    '''
+    
 
     # fit the model with the training data
     model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
-    
-    # test the model
     model_predicted = model.predict(known_x.iloc[test_indx])
-    model_known_predicted = model.predict(known_x.iloc[train_indx])
-    
-    # r2 score
-    from sklearn.metrics import r2_score
     r2_predicted = r2_score(known_y[test_indx],model_predicted)
+    
+    # choose which model to use
+    if r2_predicted > r2_lin:
+        model = model
+    else:
+        print('Using the linear model.')
+        model = lin_model
+    
+    # test the model    
+    model_known_predicted = model.predict(known_x.iloc[train_indx])
     r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
     
     # target vs predicted
@@ -319,7 +338,7 @@ def create_model_for_site(predictors,site):
     plt.title(str(r2_predicted)+', '+str(r2_known_predicted))
     plt.show()
     
-    print(str(r2_predicted)+', '+str(r2_known_predicted))
+    print(str(r2_lin)+', '+str(r2_predicted)+', '+str(r2_known_predicted))
         
     return model
 
@@ -627,6 +646,8 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         plt.plot(target_data,label='target')
         plt.legend()
         plt.show()
+
+        #results_noML = None
     
     # metadata for stations, used in the spatial interpolation
     stations = create_station_weights(stations)
@@ -655,13 +676,16 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         composite_data.loc[:,station] = station_obj.composite_data.rename(station).copy()
         
     # using the composite dataset constructed above, perform the spatial interpolation algorithm
-    #data = spatial_interp(composite_data,stations)   
-    data = spatial_interp_variable_weights(composite_data,stations)
+    data = spatial_interp(composite_data,stations)   
+    #data = spatial_interp_variable_weights(composite_data,stations)
     
     # plot the predicted, original, and composite data
     final_big_plot(data,orig,composite_data,stations)    
     matrix_val_plot(orig)
     matrix_val_plot(composite_data)    
+    
+    print('Stations used for the interpolation:')
+    print(stations)
     
     # if the closest station was ignored (for validation purposes), plot that
     # known data against the predicted data

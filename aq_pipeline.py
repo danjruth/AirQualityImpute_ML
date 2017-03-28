@@ -17,9 +17,9 @@ if ~('all_data_c' in locals()):
 
 all_data = all_data_c.copy()
 
-latlon = (34.276362,-118.683757)
-r_max_interp = 50 # how far from latlon of interest should it look for stations?
-r_max_ML = 100 # for each station it finds, how far should it look aroud it in imputing the missing values?
+latlon = (44.950720,-93.098270)
+r_max_interp = 25 # how far from latlon of interest should it look for stations?
+r_max_ML = 200 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 start_date = '2013-01-01'
 end_date = '2015-06-30'
@@ -41,7 +41,7 @@ compare_df = compare_df[np.isfinite(compare_df['target'])]
 
 from sklearn.metrics import r2_score
 r2 = r2_score(compare_df['predicted'],compare_df['target'])
-r2_noML = r2_score(compare_df['predicted_noML'],compare_df['target'])
+r2_noML = r2_score(compare_df['predicted_noML'].fillna(0),compare_df['target'])
 print('R squareds (with, without ML) are:')
 print(r2,r2_noML)
 
