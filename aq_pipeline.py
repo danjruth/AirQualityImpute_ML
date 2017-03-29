@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """
+
+Runs the algorithm implemented in AQ_ML.py
+
 Created on Sun Mar 12 19:07:18 2017
 
 @author: danjr
@@ -10,22 +13,24 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-#station_df = pd.read_csv(aq.station_df_path)
-if ~('all_data_c' in locals()):
-    all_data_c = pd.read_csv(aq.all_data_path,usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean','Parameter Code','Latitude','Longitude'])
-    all_data_c = all_data_c.rename(columns={'Site Num':'Site Number'})
+### ---- USER INPUTS ---- ###
 
-all_data = all_data_c.copy()
+start_date = '2010-06-01'
+end_date = '2014-06-30'
 
-latlon = (40.046667,-76.283333)
-r_max_interp = 100 # how far from latlon of interest should it look for stations?
-r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
+latlon = (42.719000,	-109.753000)
+r_max_interp = 150 # how far from latlon of interest should it look for stations?
+r_max_ML = 200 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
-start_date = '2011-01-01'
-end_date = '2015-06-30'
+### ---- END USER INPUTS ---- ###
 
+# get the raw daa
+all_data = aq.extract_raw_data(start_date,end_date)
+
+# run the algorithm
 data, target_data, results_noML = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=True)
 
+# plot the results against target data
 plt.figure()
 plt.plot(data,'.-',label='predicted')
 plt.plot(results_noML,'.-',label='predicted, no ML')
@@ -33,14 +38,20 @@ plt.plot(target_data,'.-',label='target')
 plt.legend()
 plt.show()
 
+# construct dataframe to facilitate comparison between methods
 compare_df = pd.DataFrame()
 compare_df['predicted'] = data
 compare_df['predicted_noML'] = results_noML
 compare_df['target'] = target_data
 compare_df = compare_df[np.isfinite(compare_df['target'])]
 
+## Compute/print some metrics
+
 from sklearn.metrics import r2_score, mean_absolute_error
 
+# window for the rolling mean calculations.
+# rolling mean is useful since values reported for soiling periods are averages
+# over at least 14 days.
 win = 14
 
 print('----- METRICS -----')
@@ -75,6 +86,7 @@ mae_roll_noML = mean_absolute_error(compare_df['predicted_noML'].rolling(window=
 print('Rolling mean abs. errors (with, without ML) are:')
 print(mae_roll,mae_roll_noML)
 
+# Print error
 plt.figure()
 plt.plot(data-target_data,label='error')
 plt.plot(results_noML-target_data,label='error, no ML')
