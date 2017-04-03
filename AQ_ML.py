@@ -77,6 +77,9 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
+    # UPDATE: HANDLE MULTIPLE READINGS AT A LOCATION
+    # https://github.com/stevenjoelbrey/SmokeInTheCity/issues/2
+    
     folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
     
     start_year = pd.to_datetime(start_date).year
@@ -86,7 +89,7 @@ def extract_raw_data(start_date,end_date,param_code=81102):
     data = pd.DataFrame()
     for year in years:
         print(year)
-        year_df = pd.read_csv(folder+'daily_'+str(param_code)+'_'+str(year)+'.csv',usecols=['State Code','County Code','Site Num','Date Local','Arithmetic Mean','Parameter Code','Latitude','Longitude'])
+        year_df = pd.read_csv(folder+'daily_'+str(param_code)+'_'+str(year)+'.csv',usecols=['State Code','County Code','Site Num','POC','Date Local','Arithmetic Mean','Parameter Code','Latitude','Longitude'])
         year_df = year_df.rename(columns={'Site Num':'Site Number'})
         data=pd.concat([data,year_df],ignore_index=True)
         
@@ -152,7 +155,7 @@ def addon_stationid(df):
     # create column of station ids. this will be the index
     station_ids = pd.Series(index=df.index)
     for i in station_ids.index:
-        station_ids.ix[i] = str(df.ix[i]['State Code'])+'_'+str(df.ix[i]['County Code'])+'_'+str(df.ix[i]['Site Number'])
+        station_ids.ix[i] = str(df.ix[i]['State Code'])+'_'+str(df.ix[i]['County Code'])+'_'+str(df.ix[i]['Site Number'])+'_'+str(df.ix[i]['POC'])
     df['station_ids'] = station_ids    
     
     return df
@@ -184,13 +187,14 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
         county_code = stations.loc[idx]['County Code']
         state_code = stations.loc[idx]['State Code']
         site_number = stations.loc[idx]['Site Number']
+        POC = stations.loc[idx]['POC']
         
-        site_rawdata = all_data[(all_data['County Code']==county_code)&(all_data['State Code']==state_code)&(all_data['Site Number']==site_number)]
+        site_rawdata = all_data[(all_data['County Code']==county_code)&(all_data['State Code']==state_code)&(all_data['Site Number']==site_number)&(all_data['POC']==POC)]
         site_rawdata = site_rawdata.set_index(pd.to_datetime(site_rawdata['Date Local']))
         
         site_rawdata = site_rawdata[(site_rawdata.index>=start_date)&(site_rawdata.index<=end_date)]
         
-        site_rawdata = site_rawdata[~site_rawdata.index.duplicated(keep='first')]
+        site_rawdata = site_rawdata[~site_rawdata.index.duplicated(keep='first')] # bad
         site_series = pd.Series(index=site_rawdata.index,data=site_rawdata['Arithmetic Mean'])
         site_series = site_series.rename(idx)
         
@@ -284,11 +288,13 @@ def create_model_for_site(predictors,site):
     lin_model = sklearn.linear_model.LinearRegression()
     lin_model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
     lin_model_predicted = lin_model.predict(known_x.iloc[test_indx])
-    r2_lin = r2_score(known_y[test_indx],lin_model_predicted)
+    r2_lin_test = r2_score(known_y[test_indx],lin_model_predicted)
+    lin_model_train_predicted = lin_model.predict(known_x.iloc[train_indx])
+    r2_lin_train = r2_score(known_y[train_indx],lin_model_train_predicted)
 
     # neural network
     import sklearn.neural_network
-    hl_size = (5) # should probably depend on training data shape
+    hl_size = (3) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
@@ -306,31 +312,38 @@ def create_model_for_site(predictors,site):
     # fit the model with the training data
     model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
     model_predicted = model.predict(known_x.iloc[test_indx])
-    r2_predicted = r2_score(known_y[test_indx],model_predicted)
+    r2_ML_test = r2_score(known_y[test_indx],model_predicted)
+    model_train_predicted = model.predict(known_x.iloc[train_indx])
+    r2_ML_train = r2_score(known_y[train_indx],model_train_predicted)
     
     # choose which model to use based on testing r2 value
-    if r2_predicted > r2_lin:
+    if r2_ML_test > r2_lin_test:
         model = model
     else:
         print('Using the linear model.')
         model = lin_model
     
     # test the model on the training data now
-    model_known_predicted = model.predict(known_x.iloc[train_indx])
-    r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
+    #model_known_predicted = model.predict(known_x.iloc[train_indx])
+    #r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
     
     # target vs predicted
     plt.figure()
     plt.plot(known_y[test_indx],model_predicted,'.',label='Linear model',color='b')
-    plt.plot(known_y[train_indx],model_known_predicted,'x',color='b')
+    plt.plot(known_y[train_indx],model_train_predicted,'x',color='b')
     plt.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
     plt.xlabel('Target')
     plt.ylabel('Predicted')
     plt.legend(loc=4)
-    plt.title(str(r2_predicted)+', '+str(r2_known_predicted))
+    #plt.title(str(r2_ML_test)+', '+str(r2_ML_train))
+    plt.pause(.1)
     plt.show()
     
-    print(str(r2_lin)+', '+str(r2_predicted)+', '+str(r2_known_predicted))
+    #print(str(r2_lin)+', '+str(r2_predicted)+', '+str(r2_known_predicted))
+    print('Linear: '+str(r2_lin_test)+' , '+str(r2_lin_train))
+    print('ML    : '+str(r2_ML_test)+' , '+str(r2_ML_train))
+    
+    
         
     return model
 
@@ -391,7 +404,7 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata):
     # perform weighted average of stations for this day 
     for date in dates:
         
-        print(date)
+        #print(date)
         
         # get weights for this day
         available_stations = list()
@@ -696,7 +709,6 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         compare_df['predicted_noML'] = results_noML
         compare_df = compare_df[np.isfinite(compare_df['target'])]
         r2 = r2_score(compare_df['predicted'],compare_df['target'])
-        print(r2)
         
         try:
             # one against the other

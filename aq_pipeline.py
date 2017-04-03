@@ -15,12 +15,12 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2010-06-01'
-end_date = '2014-06-30'
+start_date = '2013-01-01'
+end_date = '2015-03-30'
 
-latlon = (42.719000,	-109.753000)
-r_max_interp = 150 # how far from latlon of interest should it look for stations?
-r_max_ML = 200 # for each station it finds, how far should it look aroud it in imputing the missing values?
+latlon = (	39.740342,-104.991037)
+r_max_interp = 10 # how far from latlon of interest should it look for stations?
+r_max_ML = 100 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
 
@@ -44,6 +44,7 @@ compare_df['predicted'] = data
 compare_df['predicted_noML'] = results_noML
 compare_df['target'] = target_data
 compare_df = compare_df[np.isfinite(compare_df['target'])]
+compare_df = compare_df.fillna(0)
 
 ## Compute/print some metrics
 
