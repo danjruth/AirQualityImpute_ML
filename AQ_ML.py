@@ -52,8 +52,8 @@ class aq_station:
         if self.ignoring is not None:
             self.nearby_stations = self.nearby_stations[self.nearby_stations.index!=self.ignoring].copy()
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
-        self.this_station = pd.Series(self.nearby_data_df.iloc[:,0]).copy() # the first station in the df is the closest (AT the loc of interest)
-        self.nearby_data_df = self.nearby_data_df.iloc[:,1:].copy() # get rid of the closest data: this is the target data, not used in training
+        self.this_station = pd.Series(self.nearby_data_df[self.station_id]).copy() # the first station in the df is the closest (AT the loc of interest)
+        self.nearby_data_df = self.nearby_data_df.drop(self.station_id, axis=1) # get rid of the closest data: this is the target data, not used in training
         
         
     def create_model(self):
