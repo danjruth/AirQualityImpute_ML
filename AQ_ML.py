@@ -636,8 +636,8 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         # store the "target data" for comparison
         target_data = closest_obj.this_station
         
-        # get rid of the closest station
-        stations = stations.iloc[1:,:]
+        # get rid of the closest station(s)
+        stations = stations[stations['Distance']>0.1]
         
         # try predicting the values without filling in missing ones with ML
         results_noML = spatial_interp_variable_weights(closest_obj.nearby_data_df,stations)
