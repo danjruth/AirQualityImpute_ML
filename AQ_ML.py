@@ -50,10 +50,39 @@ class aq_station:
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         if self.ignoring is not None:
-            self.nearby_stations = self.nearby_stations[self.nearby_stations.index!=self.ignoring].copy()
+            print(self.ignoring)
+            self.nearby_stations = self.nearby_stations[self.nearby_stations['Latitude']!=self.ignoring[0]].copy()
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
         self.this_station = pd.Series(self.nearby_data_df[self.station_id]).copy() # the first station in the df is the closest (AT the loc of interest)
         self.nearby_data_df = self.nearby_data_df.drop(self.station_id, axis=1) # get rid of the closest data: this is the target data, not used in training
+        self.plot_matrix_station()
+        
+    def plot_matrix_station(self):
+        
+        fig = plt.figure()
+        
+        first_day = self.nearby_data_df.index[0]
+        
+        ax1 = fig.add_subplot(211)
+        days_array = np.arange((self.this_station.index[0]-first_day)/pd.Timedelta('1D'),(self.this_station.index[-1]-first_day)/pd.Timedelta('1D')+1)
+        print(days_array)
+        
+        ax1.plot(days_array,self.this_station.copy().values,'.-')
+        ax1.set_ylabel(self.this_station.name)
+        
+        '''
+        ax1.tick_params(axis='both', direction='out')
+        ax1.set_xticks(range(len(self.this_station.index)))
+        ax1.set_xticklabels(self.this_station.index)
+        im1 = ax1.imshow(data, interpolation='nearest', aspect='auto', cmap=cmap)
+        '''
+        
+        ax2 = fig.add_subplot(212,sharex=ax1)
+        ax2.matshow(self.nearby_data_df.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.nearby_data_df.columns)])
+        ax2.set_yticklabels(self.nearby_data_df.columns.values)
+        ax2.set_yticks(range(0,len(self.nearby_data_df.columns.values)))
+        
+        return fig
         
         
     def create_model(self):
@@ -63,6 +92,9 @@ class aq_station:
             self.model = None
             return
         self.gs = fill_missing_predictors(self.gs)
+        
+        
+        '''
         fig = plt.figure()       
         ax = fig.add_subplot(111)
         ax.matshow(self.gs.copy().transpose(),aspect='auto')
@@ -70,6 +102,7 @@ class aq_station:
         ax.set_yticks(range(0,len(self.gs.columns.values)))
         fig.suptitle('Creating a model. These are the "good stations".')
         fig.show()
+        '''
         self.model = create_model_for_site(self.gs,self.this_station)
         
     def run_model(self):        
@@ -218,11 +251,12 @@ def split_fill_unfill_stations(df):
         portion_missing = float(num_missing)/float(len(col_vals))
   
         # criteria for using the site: mostly daily and not missing much
-        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.2)
+        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.25)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
         else:
             bad_stations = pd.concat([bad_stations,col_vals],axis=1)
+    print(str(len(good_stations.columns))+' good stations, '+str(len(bad_stations.columns))+' bad stations.')
             
     return good_stations, bad_stations
     
@@ -294,7 +328,7 @@ def create_model_for_site(predictors,site):
 
     # neural network
     import sklearn.neural_network
-    hl_size = (3) # should probably depend on training data shape
+    hl_size = (7,7) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
@@ -328,13 +362,26 @@ def create_model_for_site(predictors,site):
     #r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
     
     # target vs predicted
-    plt.figure()
-    plt.plot(known_y[test_indx],model_predicted,'.',label='Linear model',color='b')
-    plt.plot(known_y[train_indx],model_train_predicted,'x',color='b')
-    plt.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
-    plt.xlabel('Target')
-    plt.ylabel('Predicted')
-    plt.legend(loc=4)
+    fig=plt.figure(figsize=(12,6))
+    
+    ax1 = fig.add_subplot(121)
+    ax1.plot(known_y[test_indx],model_predicted,'x',label='Testing points',color=(0,0,.8))
+    ax1.plot(known_y[train_indx],model_train_predicted,'.',label='Training points',color='k')
+    ax1.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
+    ax1.set_xlabel('Target')
+    ax1.set_ylabel('Predicted')
+    ax1.set_title('Machine Learning')
+    ax1.legend(loc=4)
+    
+    ax2 = fig.add_subplot(122)
+    ax2.plot(known_y[test_indx],lin_model_predicted,'x',label='Testing points',color=(0,0,.8))
+    ax2.plot(known_y[train_indx],lin_model_train_predicted,'.',label='Training points',color='k')
+    ax2.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
+    ax2.set_xlabel('Target')
+    ax2.set_ylabel('Predicted')
+    ax2.set_title('Linear Model')
+    ax2.legend(loc=4)
+    
     #plt.title(str(r2_ML_test)+', '+str(r2_ML_train))
     plt.pause(.1)
     plt.show()
@@ -627,6 +674,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         closest = stations.index[0]
         print(closest)
         
+        
         closest_obj = aq_station(closest)
         closest_obj.latlon = (stations.loc[closest,'Latitude'],stations.loc[closest,'Longitude'])
         closest_obj.start_date = start_date
@@ -654,7 +702,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
     print(stations)
     
     # plot these stations on a map
-    plot_station_locs(stations)
+    #plot_station_locs(stations)
     
     # for each nearby station, fill in missing data
     orig = pd.DataFrame(columns=stations.index.copy())
@@ -663,11 +711,12 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
     
         station_obj = None
         
-        station_obj =aq_station(station,ignoring=closest)
+        station_obj = aq_station(station,ignoring=closest_obj.latlon)
         station_obj.latlon = (stations.loc[station,'Latitude'],stations.loc[station,'Longitude'])
         station_obj.start_date = start_date
         station_obj.end_date = end_date
         station_obj.get_station_data(r_max_ML,all_data.copy())
+        
         orig.loc[:,station] = station_obj.this_station.copy()
         station_obj.create_model()
         station_obj.run_model()
