@@ -397,8 +397,6 @@ def create_model_for_site(predictors,site):
     #print(str(r2_lin)+', '+str(r2_predicted)+', '+str(r2_known_predicted))
     print('Linear: '+str(r2_lin_test)+' , '+str(r2_lin_train))
     print('ML    : '+str(r2_ML_test)+' , '+str(r2_ML_train))
-    
-    
         
     return model
 
@@ -664,7 +662,7 @@ def plot_station_locs(stations,target_latlon):
         (x,y) = m(stations.iloc[i]['Longitude'],stations.iloc[i]['Latitude'])
         plt.text(x,y,stations.index[i])
         
-    (x,y) = m(target_latlon[0],target_latlon[1])
+    (x,y) = m(target_latlon[1],target_latlon[0])
     m.plot(x,y,'x',color = 'r',ms=8)
     
     return fig    
