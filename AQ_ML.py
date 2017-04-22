@@ -45,15 +45,20 @@ class aq_station:
         self.ignoring=ignoring
         
     def get_station_data(self,r_max,df):
-        print('Getting station data for a station')
+        print('----------------------')
+        print('Getting station data for station '+self.station_id)
         self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         if self.ignoring is not None:
-            print(self.ignoring)
+            print('   Removing stations with latitude '+str(self.ignoring[0]))
             self.nearby_stations = self.nearby_stations[self.nearby_stations['Latitude']!=self.ignoring[0]].copy()
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
-        self.this_station = pd.Series(self.nearby_data_df[self.station_id]).copy() # the first station in the df is the closest (AT the loc of interest)
+        if self.station_id in self.nearby_data_df.columns:
+            self.this_station = pd.Series(self.nearby_data_df[self.station_id]).copy()
+        else:
+            self.this_station = pd.Series()
+            print('No data for this station!')
         self.nearby_data_df = self.nearby_data_df.drop(self.station_id, axis=1) # get rid of the closest data: this is the target data, not used in training
         self.plot_matrix_station()
         
@@ -62,12 +67,15 @@ class aq_station:
         fig = plt.figure()
         
         first_day = self.nearby_data_df.index[0]
+        #print(self.nearby_data_df)
+        #print(self.this_station)
         
         ax1 = fig.add_subplot(211)
         days_array = np.arange((self.this_station.index[0]-first_day)/pd.Timedelta('1D'),(self.this_station.index[-1]-first_day)/pd.Timedelta('1D')+1)
-        print(days_array)
+        #print(days_array)
         
-        ax1.plot(days_array,self.this_station.copy().values,'.-')
+        #ax1.plot(days_array,self.this_station.copy().values,'.-')
+        ax1.plot(self.this_station,'.-')
         ax1.set_ylabel(self.this_station.name)
         
         '''
@@ -77,7 +85,7 @@ class aq_station:
         im1 = ax1.imshow(data, interpolation='nearest', aspect='auto', cmap=cmap)
         '''
         
-        ax2 = fig.add_subplot(212,sharex=ax1)
+        ax2 = fig.add_subplot(212) #,sharex=ax1
         ax2.matshow(self.nearby_data_df.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.nearby_data_df.columns)])
         ax2.set_yticklabels(self.nearby_data_df.columns.values)
         ax2.set_yticks(range(0,len(self.nearby_data_df.columns.values)))
@@ -517,7 +525,7 @@ def final_big_plot(data,orig,composite,nearby_metadata):
     ax.plot(data,color='b',lw=2)
 
 # plot each station on a basemap
-def plot_station_locs(stations):
+def plot_station_locs(stations,target_latlon):
     
     import matplotlib.pyplot as plt
     from mpl_toolkits.basemap import Basemap
@@ -655,25 +663,27 @@ def plot_station_locs(stations):
         
         (x,y) = m(stations.iloc[i]['Longitude'],stations.iloc[i]['Latitude'])
         plt.text(x,y,stations.index[i])
-
+        
+    (x,y) = m(target_latlon[0],target_latlon[1])
+    m.plot(x,y,'x',color = 'r',ms=8)
     
     return fig    
     
 # do everything to get air quality data
-def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=False):
+def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=False,return_lots=False):
     
     # this will store the metadata for each station that'll be used
-    stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy())
-    stations = addon_stationid(stations)
-    stations = remove_dup_stations(stations)    
+    stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy()) # look at the data to find ones close enough
+    stations = addon_stationid(stations) # give each an id
+    stations = remove_dup_stations(stations) # remove the duplicates
     
     # get rid of the closest station if you want to use that for validation.
     # also save its reading so you can compare later
     closest = None # name of the closest station to ignore
     if ignore_closest:
         closest = stations.index[0]
-        print(closest)
-        
+        print('Ignoring the closest station:')
+        print(closest)        
         
         closest_obj = aq_station(closest)
         closest_obj.latlon = (stations.loc[closest,'Latitude'],stations.loc[closest,'Longitude'])
@@ -684,7 +694,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         # store the "target data" for comparison
         target_data = closest_obj.this_station
         
-        # get rid of the closest station(s)
+        # get rid of this and other stations at that same location
         stations = stations[stations['Distance']>0.1]
         
         # try predicting the values without filling in missing ones with ML
@@ -695,33 +705,49 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         plt.legend()
         plt.show()
     
-    # metadata for stations, used in the spatial interpolation
-    stations = create_station_weights(stations)
-    #print(stations)
-    
+    # metadata for stations used in the spatial interpolation
+    stations = create_station_weights(stations)    
+    print('Stations, with weights, used in the spatial interpolation:')
     print(stations)
     
     # plot these stations on a map
-    #plot_station_locs(stations)
+    plot_station_locs(stations,latlon)
+    
+    print('-----------------------------------------------------------')
+    print('Now beginning to fill in the missing data in the above stations.')
+    print('-----------------------------------------------------------')
     
     # for each nearby station, fill in missing data
     orig = pd.DataFrame(columns=stations.index.copy())
     composite_data = pd.DataFrame()
+    station_obj_list = list()
     for station in stations.index:
     
         station_obj = None
         
+        # initialize a station with its name and coordinates
         station_obj = aq_station(station,ignoring=closest_obj.latlon)
         station_obj.latlon = (stations.loc[station,'Latitude'],stations.loc[station,'Longitude'])
         station_obj.start_date = start_date
         station_obj.end_date = end_date
+        
+        # extract data from neaerby stations in the EPA database
         station_obj.get_station_data(r_max_ML,all_data.copy())
         
+        # make a copy of this station's original data
         orig.loc[:,station] = station_obj.this_station.copy()
+        
+        # create and run a model to fill in missing data
         station_obj.create_model()
         station_obj.run_model()
         
+        # store the object for this station and add the filled-in data to the composite dataset
+        station_obj_list.append(station_obj)        
         composite_data.loc[:,station] = station_obj.composite_data.rename(station).copy()
+        
+    print('-----------------------------------------------------------')
+    print('Done filling in missing data from the nearby stations.')
+    print('-----------------------------------------------------------')
         
     # using the composite dataset constructed above, perform the spatial interpolation algorithm
     if composite_data.isnull().values.any():
@@ -771,8 +797,15 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
             plt.show()
         except:
             print('error plotting')
-        
-        return data, target_data, results_noML
+            
+        if return_lots == True:
+            return data, target_data, results_noML, station_obj_list, composite_data, orig
+        else:
+            return data, target_data, results_noML
     
     else:
-        return data
+        
+        if return_lots==False:
+            return data
+        else:
+            return data, station_obj_list, composite_data, orig

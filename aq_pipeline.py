@@ -15,12 +15,12 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2012--01-01'
-end_date = '2016-01-01'
+start_date = '2010--01-01'
+end_date = '2014-01-01'
 
 latlon = (35.785671,-115.357048)
-r_max_interp = 50 # how far from latlon of interest should it look for stations?
-r_max_ML = 50 # for each station it find○s, how far should it look aroud it in imputing the missing values?
+r_max_interp = 100 # how far from latlon of interest should it look for stations?
+r_max_ML = 200 # for each station it find○s, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
 
@@ -28,7 +28,7 @@ r_max_ML = 50 # for each station it find○s, how far should it look aroud it in
 all_data = aq.extract_raw_data(start_date,end_date)
 
 # run the algorithm
-data, target_data, results_noML = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=True)
+data, target_data, results_noML, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=True,return_lots=True)
 
 # plot the results against target data
 plt.figure()
