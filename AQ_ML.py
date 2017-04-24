@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 #import pickle
 
 #station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
+#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
 #all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
+#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 # some constants
 R_earth =  6371.0 # [km]
@@ -94,7 +94,7 @@ class aq_station:
         
         
     def create_model(self):
-        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df) # nearby_data_df does NOT include the station to predict
+        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df,self.this_station) # nearby_data_df does NOT include the station to predict
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
             self.model = None
@@ -121,7 +121,8 @@ def extract_raw_data(start_date,end_date,param_code=81102):
     # UPDATE: HANDLE MULTIPLE READINGS AT A LOCATION
     # https://github.com/stevenjoelbrey/SmokeInTheCity/issues/2
     
-    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -242,9 +243,8 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
         site_rawdata = site_rawdata.set_index(pd.to_datetime(site_rawdata['Date Local']))
         
         site_rawdata = site_rawdata[(site_rawdata.index>=start_date)&(site_rawdata.index<=end_date)]
-        #print(site_rawdata)
         
-        site_rawdata = site_rawdata[~site_rawdata.index.duplicated(keep='first')] # bad
+        site_rawdata = site_rawdata[~site_rawdata.index.duplicated(keep='first')] # see if this is necessary
         site_series = pd.Series(index=site_rawdata.index,data=site_rawdata['Arithmetic Mean'])
         site_series = site_series.rename(idx)
         
@@ -255,20 +255,23 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
     
 # for a given set of stations, separate the ones that are full enough and those that aren't
 # only the full ones will be used
-def split_fill_unfill_stations(df):
+def split_fill_unfill_stations(df,this_station):
     
     good_stations = pd.DataFrame()
     bad_stations = pd.DataFrame()
     
+    missing_days = this_station.index[pd.isnull(this_station)]
+
     # look at each column (data for a given station) and see if it's good or bad
     for column in df:
         col_vals = df[column]
+        col_while_missing = col_vals[missing_days]
         rate = identify_sampling_rate(col_vals)
-        num_missing = len(col_vals[pd.isnull(col_vals)==True])
-        portion_missing = float(num_missing)/float(len(col_vals))
+        num_missing = len(col_while_missing[pd.isnull(col_vals)==True])
+        portion_missing = float(num_missing)/float(len(col_while_missing))
   
         # criteria for using the site: mostly daily and not missing much
-        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.4)
+        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.3)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
         else:
