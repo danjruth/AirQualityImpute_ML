@@ -47,7 +47,7 @@ class aq_station:
     def get_station_data(self,r_max,df):
         print('----------------------')
         print('Getting station data for station '+self.station_id)
-        self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df)
+        self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df,self.start_date,self.end_date)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         if self.ignoring is not None:
@@ -134,6 +134,10 @@ def extract_raw_data(start_date,end_date,param_code=81102):
         year_df = year_df.rename(columns={'Site Num':'Site Number'})
         data=pd.concat([data,year_df],ignore_index=True)
         
+    #print(data)
+    #data = data[(data.index>=start_date)]
+    #data = data[(data.index<=end_date)]
+        
     return data
 
 # distance in kilometers between two coordinates
@@ -172,7 +176,7 @@ def identify_sampling_rate(series):
 # with a given latlon and r_max, pick out stations within that radius from a df
 # with STATION DATA, not the metadata spreadsheet. This way we actually get 
 # sites that have data
-def identify_nearby_stations(latlon,r_max,df,ignore_closest=False):
+def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=False):
     
     # separate latitude/longitude
     my_lat = latlon[0]
@@ -188,6 +192,10 @@ def identify_nearby_stations(latlon,r_max,df,ignore_closest=False):
     
     # get rid of stations that are far away
     param_stations = param_stations[param_stations['Distance']<=r_max]
+    
+    # add the datetime, so sites without data in our date range can be excluded
+    param_stations['Date Local'] = pd.to_datetime(param_stations['Date Local'])
+    param_stations = param_stations[(param_stations['Date Local']>=start_date)&(param_stations['Date Local']<=end_date)]
 
     return param_stations    
     
@@ -234,6 +242,7 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
         site_rawdata = site_rawdata.set_index(pd.to_datetime(site_rawdata['Date Local']))
         
         site_rawdata = site_rawdata[(site_rawdata.index>=start_date)&(site_rawdata.index<=end_date)]
+        #print(site_rawdata)
         
         site_rawdata = site_rawdata[~site_rawdata.index.duplicated(keep='first')] # bad
         site_series = pd.Series(index=site_rawdata.index,data=site_rawdata['Arithmetic Mean'])
@@ -259,7 +268,7 @@ def split_fill_unfill_stations(df):
         portion_missing = float(num_missing)/float(len(col_vals))
   
         # criteria for using the site: mostly daily and not missing much
-        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.25)
+        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.4)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
         else:
@@ -671,17 +680,16 @@ def plot_station_locs(stations,target_latlon):
 def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=False,return_lots=False):
     
     # this will store the metadata for each station that'll be used
-    stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy()) # look at the data to find ones close enough
+    stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date) # look at the data to find ones close enough
     stations = addon_stationid(stations) # give each an id
     stations = remove_dup_stations(stations) # remove the duplicates
-    
+
     # get rid of the closest station if you want to use that for validation.
     # also save its reading so you can compare later
     closest = None # name of the closest station to ignore
     if ignore_closest:
         closest = stations.index[0]
-        print('Ignoring the closest station:')
-        print(closest)        
+        print('Ignoring the closest station: '+closest+', which is at ('+str(stations.loc[closest,'Latitude'])+', '+str(stations.loc[closest,'Longitude'])+').')
         
         closest_obj = aq_station(closest)
         closest_obj.latlon = (stations.loc[closest,'Latitude'],stations.loc[closest,'Longitude'])
@@ -767,6 +775,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
     # known data against the predicted data
     if ignore_closest:
         
+        '''
         # both time series
         plt.figure()
         plt.plot(data,label='predicted')
@@ -774,12 +783,13 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         plt.plot(target_data,'.-',label='target')
         plt.legend()
         plt.show()
+        '''
         
         from sklearn.metrics import r2_score
         compare_df = pd.DataFrame()
-        compare_df['predicted'] = data
-        compare_df['target'] = target_data
-        compare_df['predicted_noML'] = results_noML
+        compare_df['predicted'] = data.copy()
+        compare_df['target'] = target_data.copy()
+        compare_df['predicted_noML'] = results_noML.copy()
         compare_df = compare_df[np.isfinite(compare_df['target'])]
         r2 = r2_score(compare_df['predicted'],compare_df['target'])
         

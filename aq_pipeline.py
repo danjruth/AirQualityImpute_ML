@@ -15,10 +15,10 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2013--01-01'
-end_date = '2016-01-01'
+start_date = '2014-01-01'
+end_date = '2015-01-01'
 
-latlon = (	45.028620,	-92.783360)
+latlon = (41.80118,-87.832349)
 r_max_interp = 100 # how far from latlon of interest should it look for stations?
 r_max_ML = 200 # for each station it find○s, how far should it look aroud it in imputing the missing values?
 
@@ -30,22 +30,15 @@ all_data = aq.extract_raw_data(start_date,end_date)
 # run the algorithm
 data, target_data, results_noML, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=True,return_lots=True)
 
-# plot the results against target data
-plt.figure()
-plt.plot(data,'.-',label='predicted')
-plt.plot(results_noML,'.-',label='predicted, no ML')
-plt.plot(target_data,'.-',label='target')
-plt.legend()
-plt.show()
-
 # construct dataframe to facilitate comparison between methods
 compare_df = pd.DataFrame()
 compare_df['predicted'] = data
 compare_df['predicted_noML'] = results_noML
 compare_df['target'] = target_data
 compare_df_all = compare_df.copy()
+# only keep rows for which there is target data to compare against; fill missing predicted values with 0?
 compare_df = compare_df[np.isfinite(compare_df['target'])]
-compare_df = compare_df.fillna(0)
+compare_df = compare_df.fillna(0) # think more about this
 
 ## Compute/print some metrics
 
@@ -87,6 +80,25 @@ mae_roll = mean_absolute_error(compare_df['predicted'].rolling(window=win,min_pe
 mae_roll_noML = mean_absolute_error(compare_df['predicted_noML'].rolling(window=win,min_periods=0).mean(),compare_df['target'].rolling(window=win,min_periods=0).mean())
 print('Rolling mean abs. errors (with, without ML) are:')
 print(mae_roll,mae_roll_noML)
+
+# plot the results against target data
+fig = plt.figure(figsize=(12,6))
+ax1 = fig.add_subplot(211)
+ax1.plot(results_noML,'.-',color='gray',label='predicted, no ML')
+ax1.plot(data,'.-',color='k',label='predicted')
+ax1.plot(target_data,'.-',color='green',label='target')
+ax1.legend()
+ax1.set_title('Instantaneous')
+plt.show()
+
+# plot the results against target data
+ax2 = fig.add_subplot(212,sharex=ax1,sharey=ax1)
+ax2.plot(results_noML.rolling(window=win,min_periods=0).mean(),'.-',color='gray',label='predicted, no ML')
+ax2.plot(data.rolling(window=win,min_periods=0).mean(),'.-',color='k',label='predicted')
+ax2.plot(target_data.rolling(window=win,min_periods=0).mean(),'.-',color='green',label='target')
+ax2.set_title('Rolling')
+ax2.legend()
+plt.show()
 
 # Print error
 plt.figure()
