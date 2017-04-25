@@ -43,14 +43,11 @@ class aq_station:
         
         # get data of interest
         self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df,self.start_date,self.end_date)
-        #print('After identify_nearby_stations:')
-        #print(self.nearby_stations)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         if self.ignoring is not None:
             print('   Removing stations with latitude '+str(self.ignoring[0]))
             self.nearby_stations = self.nearby_stations[self.nearby_stations['Latitude']!=self.ignoring[0]].copy()
-        #print(self.nearby_stations)
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
         if self.station_id in self.nearby_data_df.columns:
             self.this_station = pd.Series(self.nearby_data_df[self.station_id]).copy()
@@ -61,16 +58,11 @@ class aq_station:
         
         # get the data for the other stations
         self.other_stations = identify_nearby_stations(self.latlon,r_max,other_data,self.start_date,self.end_date)
-        #print('After identify_nearby_stations:')
-        #print(self.other_stations)
         self.other_stations = addon_stationid(self.other_stations)
-        #print('After addon_stationid:')
-        #print(self.other_stations)
         self.other_stations = remove_dup_stations(self.other_stations,ignore_closest=False)
         if self.ignoring is not None:
             print('   Removing stations with latitude '+str(self.ignoring[0]))
             self.other_stations = self.other_stations[self.other_stations['Latitude']!=self.ignoring[0]].copy()
-        #print(self.other_stations)
         self.other_data_df = extract_nearby_values(self.other_stations,other_data,self.start_date,self.end_date)
         
     def plot_matrix_station(self):
@@ -78,23 +70,12 @@ class aq_station:
         fig = plt.figure(figsize=(12,6))
         
         first_day = self.nearby_data_df.index[0]
-        #print(self.nearby_data_df)
-        #print(self.this_station)
-        
+
         ax1 = fig.add_subplot(211)
         days_array = np.arange((self.this_station.index[0]-first_day)/pd.Timedelta('1D'),(self.this_station.index[-1]-first_day)/pd.Timedelta('1D')+1)
-        #print(days_array)
         
-        #ax1.plot(days_array,self.this_station.copy().values,'.-')
         ax1.plot(self.this_station,'.-')
         ax1.set_ylabel(self.this_station.name)
-        
-        '''
-        ax1.tick_params(axis='both', direction='out')
-        ax1.set_xticks(range(len(self.this_station.index)))
-        ax1.set_xticklabels(self.this_station.index)
-        im1 = ax1.imshow(data, interpolation='nearest', aspect='auto', cmap=cmap)
-        '''
         
         ax2 = fig.add_subplot(212) #,sharex=ax1
         ax2.matshow(self.gs.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.gs.columns)])
@@ -105,7 +86,7 @@ class aq_station:
         
     def create_model(self):
         
-        # first, look at the data of same type as predicted
+        # determine which features should be used for this model
         self.gs,bs = feature_selection(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
             
         if self.gs.empty:
@@ -116,6 +97,7 @@ class aq_station:
         # fill missing predictors
         self.gs = fill_missing_predictors(self.gs)
         
+        # plot the features and the value to predict
         self.plot_matrix_station()
         
         # create a model
@@ -139,10 +121,6 @@ def extract_raw_data(start_date,end_date,param_code=81102):
         year_df = pd.read_csv(folder+'daily_'+str(param_code)+'_'+str(year)+'.csv',usecols=['State Code','County Code','Site Num','POC','Date Local','Arithmetic Mean','Parameter Code','Latitude','Longitude'])
         year_df = year_df.rename(columns={'Site Num':'Site Number'})
         data=pd.concat([data,year_df],ignore_index=True)
-        
-    #print(data)
-    #data = data[(data.index>=start_date)]
-    #data = data[(data.index<=end_date)]
         
     return data
 
@@ -187,9 +165,7 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
     # separate latitude/longitude
     my_lat = latlon[0]
     my_lon = latlon[1]
-    
-    # only look at stations reporting the parameter we're interested in
-    #param_stations = df.ix[df['Parameter Code']==param_code,:]    
+
     param_stations = df.copy()
     
     # compute distance between these sites and our point
@@ -225,8 +201,6 @@ def remove_dup_stations(param_stations,ignore_closest=False):
     
     if ignore_closest:
         param_stations = param_stations.iloc[1:,:]
-
-    #print(param_stations)
     
     return param_stations
     
@@ -262,7 +236,7 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
     
 # for a given set of stations, separate the ones that are full enough and those that aren't
 # only the full ones will be used
-def feature_selection(df,this_station,stations_to_keep=7):
+def feature_selection(df,this_station,stations_to_keep=None):
     
     good_stations = pd.DataFrame()
     bad_stations = pd.DataFrame()
@@ -288,6 +262,10 @@ def feature_selection(df,this_station,stations_to_keep=7):
             bad_stations = pd.concat([bad_stations,col_vals],axis=1)
     
     print(str(len(good_stations.columns))+' good stations, '+str(len(bad_stations.columns))+' bad stations.')
+    
+    # choose how many stations to keep based on how many datapoints there will be to train on
+    if stations_to_keep is None:
+        stations_to_keep = max(3,int(len(this_station.index[pd.notnull(this_station)])/15))
     
     corr_vals = pd.Series(index=good_stations.columns)
     for station in corr_vals.index:
@@ -339,7 +317,8 @@ def create_model_for_site(predictors,site):
     
     # split into known/unknown datapoints
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
-    if (len(known_y)<5 or len(unknown_x)<5):
+    if len(known_y)<5:
+        print('Not enough known values for this station!')
         return None
     
     for p in predictors.columns:
@@ -367,6 +346,7 @@ def create_model_for_site(predictors,site):
 
     # neural network
     import sklearn.neural_network
+    #HL1_size = int(len(predictors.columns)*)
     hl_size = (5,3) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
