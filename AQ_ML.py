@@ -150,8 +150,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    folder = 'C:\Users\druth\Documents\epa_data\\'
+    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -264,12 +264,13 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
     # collect data for each nearby station
     for idx in stations.index:
         
+        param_code = stations.loc[idx]['Parameter Code']
         county_code = stations.loc[idx]['County Code']
         state_code = stations.loc[idx]['State Code']
         site_number = stations.loc[idx]['Site Number']
         POC = stations.loc[idx]['POC']
         
-        site_rawdata = all_data[(all_data['County Code']==county_code)&(all_data['State Code']==state_code)&(all_data['Site Number']==site_number)&(all_data['POC']==POC)]
+        site_rawdata = all_data[(all_data['Parameter Code']==param_code)&(all_data['County Code']==county_code)&(all_data['State Code']==state_code)&(all_data['Site Number']==site_number)&(all_data['POC']==POC)]
         site_rawdata = site_rawdata.set_index(pd.to_datetime(site_rawdata['Date Local']))
         
         site_rawdata = site_rawdata[(site_rawdata.index>=start_date)&(site_rawdata.index<=end_date)]
@@ -304,9 +305,10 @@ def split_fill_unfill_stations(df,this_station):
         portion_missing = float(num_missing)/float(len(col_while_missing))
   
         # criteria for using the site: mostly daily and not missing much
-        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.3)
+        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.1)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
+            #print('   Corr with '+str(this_station.name)+': '+str(this_station.corr()))
         else:
             bad_stations = pd.concat([bad_stations,col_vals],axis=1)
     print(str(len(good_stations.columns))+' good stations, '+str(len(bad_stations.columns))+' bad stations.')
@@ -318,9 +320,6 @@ def fill_missing_predictors(predictors):
     
     print('Filling in the missing values from the predictors...')
     
-    #print(predictors)
-    
-    #print(predictors.empty)
     if predictors.empty:
         predictors = 0
         
@@ -359,6 +358,9 @@ def create_model_for_site(predictors,site):
     if (len(known_y)<5 or len(unknown_x)<5):
         return None
     
+    for p in predictors.columns:
+        print('   Correlation for '+p+': '+str(predictors[p].corr(site)))
+    
     # shuffle rows
     from sklearn.utils import shuffle
     known_x,known_y = shuffle(known_x.copy(),known_y.copy())
@@ -381,7 +383,7 @@ def create_model_for_site(predictors,site):
 
     # neural network
     import sklearn.neural_network
-    hl_size = (3,2) # should probably depend on training data shape
+    hl_size = (10,7) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import numpy as np
 
-r_max = 150
+r_max = 250
 
 fig = plt.figure(figsize=(15, 8), facecolor='w')    
 
@@ -29,9 +29,7 @@ m.drawcoastlines()
 
 plt.show()
 
-
-param_colors = {88101:'b',44201:'c',42101:'m'}
-
+param_colors = {88101:'g',44201:'c',42101:'m'}
 
 # plot each EPA site on the map, and connect it to the soiling station with a line whose width is proportional to the weight
 for station in station_obj_list:
@@ -39,7 +37,6 @@ for station in station_obj_list:
     for nearby_station_indx in station.nearby_stations.index:
         
         if nearby_station_indx in station.gs.columns:
-        #if True:
             
             nearby_station = station.nearby_stations.loc[nearby_station_indx]
             (x,y) = m([station.latlon[1],nearby_station['Longitude']],[station.latlon[0],nearby_station['Latitude']])
@@ -51,7 +48,6 @@ for station in station_obj_list:
     for other_station_indx in station.other_stations.index:
         
         if other_station_indx in station.gs.columns:
-        #if True:
             
             other_station = station.other_stations.loc[other_station_indx]
             (x,y) = m([station.latlon[1],other_station['Longitude']],[station.latlon[0],other_station['Latitude']])
