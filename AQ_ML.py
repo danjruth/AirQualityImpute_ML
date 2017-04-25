@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 # some constants
 R_earth =  6371.0 # [km]
-param_code = 81102
+#param_code = 81102
 
 # plot a matrix of nearby station values, labeling each station
 def matrix_val_plot(df,fig=None):
@@ -44,15 +44,20 @@ class aq_station:
         self.end_date = None
         self.ignoring=ignoring
         
-    def get_station_data(self,r_max,df):
+    def get_station_data(self,r_max,df,other_data):
         print('----------------------')
         print('Getting station data for station '+self.station_id)
+        
+        # get data of interest
         self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df,self.start_date,self.end_date)
+        #print('After identify_nearby_stations:')
+        #print(self.nearby_stations)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         if self.ignoring is not None:
             print('   Removing stations with latitude '+str(self.ignoring[0]))
             self.nearby_stations = self.nearby_stations[self.nearby_stations['Latitude']!=self.ignoring[0]].copy()
+        #print(self.nearby_stations)
         self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
         if self.station_id in self.nearby_data_df.columns:
             self.this_station = pd.Series(self.nearby_data_df[self.station_id]).copy()
@@ -60,11 +65,24 @@ class aq_station:
             self.this_station = pd.Series()
             print('No data for this station!')
         self.nearby_data_df = self.nearby_data_df.drop(self.station_id, axis=1) # get rid of the closest data: this is the target data, not used in training
-        self.plot_matrix_station()
+        
+        # get the data for the other stations
+        self.other_stations = identify_nearby_stations(self.latlon,r_max,other_data,self.start_date,self.end_date)
+        #print('After identify_nearby_stations:')
+        #print(self.other_stations)
+        self.other_stations = addon_stationid(self.other_stations)
+        #print('After addon_stationid:')
+        #print(self.other_stations)
+        self.other_stations = remove_dup_stations(self.other_stations,ignore_closest=False)
+        if self.ignoring is not None:
+            print('   Removing stations with latitude '+str(self.ignoring[0]))
+            self.other_stations = self.other_stations[self.other_stations['Latitude']!=self.ignoring[0]].copy()
+        #print(self.other_stations)
+        self.other_data_df = extract_nearby_values(self.other_stations,other_data,self.start_date,self.end_date)
         
     def plot_matrix_station(self):
         
-        fig = plt.figure()
+        fig = plt.figure(figsize=(12,6))
         
         first_day = self.nearby_data_df.index[0]
         #print(self.nearby_data_df)
@@ -86,40 +104,51 @@ class aq_station:
         '''
         
         ax2 = fig.add_subplot(212) #,sharex=ax1
-        ax2.matshow(self.nearby_data_df.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.nearby_data_df.columns)])
-        ax2.set_yticklabels(self.nearby_data_df.columns.values)
-        ax2.set_yticks(range(0,len(self.nearby_data_df.columns.values)))
+        ax2.matshow(self.gs.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.gs.columns)])
+        ax2.set_yticklabels(self.gs.columns.values)
+        ax2.set_yticks(range(0,len(self.gs.columns.values)))
         
         return fig
         
         
-    def create_model(self):
+    def create_model(self,other_data):
+        
+        # first, look at the data of same type as predicted
         self.gs,bs = split_fill_unfill_stations(self.nearby_data_df,self.this_station) # nearby_data_df does NOT include the station to predict
+            
+        # now, get other data
+        other_good,other_bad = split_fill_unfill_stations(self.other_data_df,self.this_station)
+        
+        # concatenate all the data
+        self.gs = pd.concat([self.gs,other_good],axis=1)
+        
+        '''
+        both_sets_of_stations = pd.concat([self.nearby_stations,self.other_stations],axis=0)
+        print(both_sets_of_stations)
+        print(self.gs.columns)
+        both_sets_of_stations = both_sets_of_stations[pd.Series(data=self.gs.columns)]
+        
+        print(both_sets_of_stations)
+        stophere
+        '''
+        
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
             self.model = None
             return
+            
+        # fill missing predictors
         self.gs = fill_missing_predictors(self.gs)
         
+        self.plot_matrix_station()
         
-        '''
-        fig = plt.figure()       
-        ax = fig.add_subplot(111)
-        ax.matshow(self.gs.copy().transpose(),aspect='auto')
-        ax.set_yticklabels(self.gs.columns.values)
-        ax.set_yticks(range(0,len(self.gs.columns.values)))
-        fig.suptitle('Creating a model. These are the "good stations".')
-        fig.show()
-        '''
+        # create a model
         self.model = create_model_for_site(self.gs,self.this_station)
         
     def run_model(self):        
         self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
 
 def extract_raw_data(start_date,end_date,param_code=81102):
-    
-    # UPDATE: HANDLE MULTIPLE READINGS AT A LOCATION
-    # https://github.com/stevenjoelbrey/SmokeInTheCity/issues/2
     
     #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
     folder = 'C:\Users\druth\Documents\epa_data\\'
@@ -184,8 +213,9 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
     my_lon = latlon[1]
     
     # only look at stations reporting the parameter we're interested in
-    param_stations = df.ix[df['Parameter Code']==param_code,:]    
-
+    #param_stations = df.ix[df['Parameter Code']==param_code,:]    
+    param_stations = df.copy()
+    
     # compute distance between these sites and our point
     d = lat_lon_dist([param_stations['Latitude'],param_stations['Longitude']],[my_lat,my_lon])
     param_stations['Distance'] = d
@@ -205,7 +235,7 @@ def addon_stationid(df):
     # create column of station ids. this will be the index
     station_ids = pd.Series(index=df.index)
     for i in station_ids.index:
-        station_ids.ix[i] = str(df.ix[i]['State Code'])+'_'+str(df.ix[i]['County Code'])+'_'+str(df.ix[i]['Site Number'])+'_'+str(df.ix[i]['POC'])
+        station_ids.loc[i] = str(df.loc[i]['Parameter Code'])+'_'+str(df.loc[i]['State Code'])+'_'+str(df.loc[i]['County Code'])+'_'+str(df.loc[i]['Site Number'])+'_'+str(df.loc[i]['POC'])
     df['station_ids'] = station_ids    
     
     return df
@@ -261,6 +291,9 @@ def split_fill_unfill_stations(df,this_station):
     bad_stations = pd.DataFrame()
     
     missing_days = this_station.index[pd.isnull(this_station)]
+                                      
+    if len(missing_days)==0:
+        missing_days = this_station.index
 
     # look at each column (data for a given station) and see if it's good or bad
     for column in df:
@@ -292,7 +325,7 @@ def fill_missing_predictors(predictors):
         predictors = 0
         
     import sklearn.preprocessing
-    imp = sklearn.preprocessing.Imputer(missing_values='NaN', strategy='mean', axis=0)
+    imp = sklearn.preprocessing.Imputer(missing_values='NaN', strategy='mean', axis=0) # impute along columns
     predictors_filled = imp.fit_transform(predictors).copy()
     predictors_filled_df = pd.DataFrame(index=predictors.index,columns=predictors.columns,data=predictors_filled)
         
@@ -348,7 +381,7 @@ def create_model_for_site(predictors,site):
 
     # neural network
     import sklearn.neural_network
-    hl_size = (7,7) # should probably depend on training data shape
+    hl_size = (3,2) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
@@ -426,8 +459,7 @@ def fill_with_model(predictors,site,model):
     composite_series = site.copy() # start with site data
     composite_series[pd.isnull(site)] = predicted_y.copy()
     
-    return composite_series
-    
+    return composite_series    
     
 # once nearby stations have been picked, add on a column of their weights (for
 # the spatial interpolation algorithm)
@@ -541,94 +573,6 @@ def plot_station_locs(stations,target_latlon):
     from mpl_toolkits.basemap import Basemap
     import numpy as np
     
-    ###############################
-    # http://www.geophysique.be/2011/02/20/matplotlib-basemap-tutorial-09-drawing-circles/ 
-    
-    def shoot(lon, lat, azimuth, maxdist=None):
-        """Shooter Function
-        Original javascript on http://williams.best.vwh.net/gccalc.htm
-        Translated to python by Thomas Lecocq
-        """
-        glat1 = lat * np.pi / 180.
-        glon1 = lon * np.pi / 180.
-        s = maxdist / 1.852
-        faz = azimuth * np.pi / 180.
-     
-        EPS= 0.00000000005
-        if ((np.abs(np.cos(glat1))<EPS) and not (np.abs(np.sin(faz))<EPS)):
-            alert("Only N-S courses are meaningful, starting at a pole!")
-     
-        a=6378.13/1.852
-        f=1/298.257223563
-        r = 1 - f
-        tu = r * np.tan(glat1)
-        sf = np.sin(faz)
-        cf = np.cos(faz)
-        if (cf==0):
-            b=0.
-        else:
-            b=2. * np.arctan2 (tu, cf)
-     
-        cu = 1. / np.sqrt(1 + tu * tu)
-        su = tu * cu
-        sa = cu * sf
-        c2a = 1 - sa * sa
-        x = 1. + np.sqrt(1. + c2a * (1. / (r * r) - 1.))
-        x = (x - 2.) / x
-        c = 1. - x
-        c = (x * x / 4. + 1.) / c
-        d = (0.375 * x * x - 1.) * x
-        tu = s / (r * a * c)
-        y = tu
-        c = y + 1
-        while (np.abs (y - c) > EPS):
-     
-            sy = np.sin(y)
-            cy = np.cos(y)
-            cz = np.cos(b + y)
-            e = 2. * cz * cz - 1.
-            c = y
-            x = e * cy
-            y = e + e - 1.
-            y = (((sy * sy * 4. - 3.) * y * cz * d / 6. + x) *
-                  d / 4. - cz) * sy * d + tu
-     
-        b = cu * cy * cf - su * sy
-        c = r * np.sqrt(sa * sa + b * b)
-        d = su * cy + cu * sy * cf
-        glat2 = (np.arctan2(d, c) + np.pi) % (2*np.pi) - np.pi
-        c = cu * cy - su * sy * cf
-        x = np.arctan2(sy * sf, c)
-        c = ((-3. * c2a + 4.) * f + 4.) * c2a * f / 16.
-        d = ((e * cy * c + cz) * sy * c + y) * sa
-        glon2 = ((glon1 + x - (1. - c) * d * f + np.pi) % (2*np.pi)) - np.pi    
-     
-        baz = (np.arctan2(sa, b) + np.pi) % (2 * np.pi)
-     
-        glon2 *= 180./np.pi
-        glat2 *= 180./np.pi
-        baz *= 180./np.pi
-     
-        return (glon2, glat2, baz)
-    
-    def equi(m, centerlon, centerlat, radius, *args, **kwargs):
-        glon1 = centerlon
-        glat1 = centerlat
-        X = []
-        Y = []
-        for azimuth in range(0, 360):
-            glon2, glat2, baz = shoot(glon1, glat1, azimuth, radius)
-            X.append(glon2)
-            Y.append(glat2)
-        X.append(X[0])
-        Y.append(Y[0])
-     
-        #m.plot(X,Y,**kwargs) #Should work, but doesn't...
-        X,Y = m(X,Y)
-        plt.plot(X,Y,**kwargs)
-        
-    #######################################
-    
     # "unpack" data from air quality object
     #print(aq_obj.monitor_info)
     #monitor_info = aq_obj.monitor_info
@@ -680,7 +624,7 @@ def plot_station_locs(stations,target_latlon):
     return fig    
     
 # do everything to get air quality data
-def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=False,return_lots=False):
+def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=False,return_lots=False):
     
     # this will store the metadata for each station that'll be used
     stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date) # look at the data to find ones close enough
@@ -698,7 +642,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         closest_obj.latlon = (stations.loc[closest,'Latitude'],stations.loc[closest,'Longitude'])
         closest_obj.start_date = start_date
         closest_obj.end_date = end_date
-        closest_obj.get_station_data(r_max_ML,all_data.copy())
+        closest_obj.get_station_data(r_max_interp,all_data.copy(),other_data.copy())
         
         # store the "target data" for comparison
         target_data = closest_obj.this_station
@@ -706,7 +650,11 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         # get rid of this and other stations at that same location
         stations = stations[stations['Distance']>0.1]
         
+        print('Stations, before weights are computed:')
+        print(stations)
+        
         # try predicting the values without filling in missing ones with ML
+        print('Predicting the values at this station without imputation...')
         results_noML = spatial_interp_variable_weights(closest_obj.nearby_data_df,stations)
         plt.figure()
         plt.plot(results_noML,label='results, no ML')
@@ -720,7 +668,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
     print(stations)
     
     # plot these stations on a map
-    plot_station_locs(stations,latlon)
+    #plot_station_locs(stations,latlon)
     
     print('-----------------------------------------------------------')
     print('Now beginning to fill in the missing data in the above stations.')
@@ -741,13 +689,13 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         station_obj.end_date = end_date
         
         # extract data from neaerby stations in the EPA database
-        station_obj.get_station_data(r_max_ML,all_data.copy())
+        station_obj.get_station_data(r_max_ML,all_data.copy(),other_data.copy())
         
         # make a copy of this station's original data
         orig.loc[:,station] = station_obj.this_station.copy()
         
         # create and run a model to fill in missing data
-        station_obj.create_model()
+        station_obj.create_model(other_data.copy())
         station_obj.run_model()
         
         # store the object for this station and add the filled-in data to the composite dataset
@@ -787,6 +735,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
         plt.legend()
         plt.show()
         '''
+        '''
         
         from sklearn.metrics import r2_score
         compare_df = pd.DataFrame()
@@ -808,6 +757,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ig
             plt.show()
         except:
             print('error plotting')
+        '''
             
         if return_lots == True:
             return data, target_data, results_noML, station_obj_list, composite_data, orig

@@ -15,20 +15,28 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2013-01-01'
-end_date = '2015-01-01'
+start_date = '2012-01-01'
+end_date = '2013-12-01'
 
-latlon = (28.746111,-81.310556)
-r_max_interp = 200 # how far from latlon of interest should it look for stations?
-r_max_ML = 300 # for each station it find○s, how far should it look aroud it in imputing the missing values?
+latlon = (36.844096,-121.362121)
+r_max_interp = 100 # how far from latlon of interest should it look for stations?
+r_max_ML = 100 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
 
 # get the raw daa
 all_data = aq.extract_raw_data(start_date,end_date)
+pm25_data = aq.extract_raw_data(start_date,end_date,param_code=88101)
+ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
+CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
+#ozone_data = pd.DataFrame()
+
+#other_data = pd.concat([pm25_data,ozone_data,CO_data])
+other_data = pm25_data
+other_data = other_data.set_index(pd.Series(data=range(len(other_data))))
 
 # run the algorithm
-data, target_data, results_noML, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ignore_closest=True,return_lots=True)
+data, target_data, results_noML, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)
 
 # construct dataframe to facilitate comparison between methods
 compare_df = pd.DataFrame()
@@ -98,6 +106,8 @@ ax2.plot(data.rolling(window=win,min_periods=0).mean(),'.-',color='k',label='pre
 ax2.plot(target_data.rolling(window=win,min_periods=0).mean(),'.-',color='green',label='target')
 ax2.set_title('Rolling')
 ax2.legend()
+ax1.set_ylabel('PM10 Concentration')
+ax2.set_ylabel('PM10 Concentration')
 plt.show()
 
 # Print error
@@ -106,3 +116,17 @@ plt.plot(data-target_data,label='error')
 plt.plot(results_noML-target_data,label='error, no ML')
 plt.legend()
 plt.show()
+
+# one against the other
+plt.figure()
+plt.scatter(compare_df['target'],compare_df['predicted'],label='with ML')
+plt.scatter(compare_df['target'],compare_df['predicted_noML'],label='no ML')
+plt.plot([0,0],[data.max(),data.max()])
+plt.legend()
+plt.ylabel('Predicted')
+plt.xlabel('Target')
+plt.show()
+
+
+
+# make a nice plot
