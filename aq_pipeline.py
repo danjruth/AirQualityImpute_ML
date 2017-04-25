@@ -18,20 +18,20 @@ import numpy as np
 start_date = '2014-01-01'
 end_date = '2015-12-01'
 
-latlon = (33.410450,-111.865070)
+latlon = (38.650783,-121.506767)
 r_max_interp = 25 # how far from latlon of interest should it look for stations?
-r_max_ML = 150 # for each station it finds, how far should it look aroud it in imputing the missing values?
+r_max_ML = 100 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
 
 # get the raw daa
 all_data = aq.extract_raw_data(start_date,end_date)
 pm25_data = aq.extract_raw_data(start_date,end_date,param_code=88101)
-#ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
+ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
 CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
 #ozone_data = pd.DataFrame()
 
-other_data = pd.concat([pm25_data,CO_data])
+other_data = pd.concat([pm25_data,CO_data,ozone_data])
 #other_data = pm25_data
 other_data = other_data.set_index(pd.Series(data=range(len(other_data))))
 
@@ -63,7 +63,7 @@ r2 = r2_score(compare_df['predicted'],compare_df['target'])
 r2_noML = r2_score(compare_df['predicted_noML'],compare_df['target'])
 print('R squareds (with, without ML) are:')
 print(r2,r2_noML)
-
+ 
 r2_roll = r2_score(compare_df['predicted'].rolling(window=win,min_periods=0).mean(),compare_df['target'].rolling(window=win,min_periods=0).mean())
 r2_roll_noML = r2_score(compare_df['predicted_noML'].rolling(window=win,min_periods=0).mean(),compare_df['target'].rolling(window=win,min_periods=0).mean())
 print('Rolling r squareds (with, without ML) are:')

@@ -8,16 +8,9 @@ Created on Wed Mar 01 19:14:39 2017
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-#import pickle
-
-#station_df_path = 'C:\Users\druth\Documents\FS\AirQuality\\aqs_monitors.csv'
-#station_df_path = 'C:\Users\danjr\Documents\ML\Air Quality\\aqs_monitors.csv'
-#all_data_path = 'C:\Users\druth\Documents\FS\AirQuality\\daily_81102_allYears.csv'
-#all_data_path = 'C:\Users\danjr\Documents\ML\Air Quality\\daily_81102_allYears.csv'
 
 # some constants
 R_earth =  6371.0 # [km]
-#param_code = 81102
 
 # plot a matrix of nearby station values, labeling each station
 def matrix_val_plot(df,fig=None):
@@ -108,30 +101,13 @@ class aq_station:
         ax2.set_yticklabels(self.gs.columns.values)
         ax2.set_yticks(range(0,len(self.gs.columns.values)))
         
-        return fig
+        return fig        
         
-        
-    def create_model(self,other_data):
+    def create_model(self):
         
         # first, look at the data of same type as predicted
-        self.gs,bs = split_fill_unfill_stations(self.nearby_data_df,self.this_station) # nearby_data_df does NOT include the station to predict
+        self.gs,bs = feature_selection(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
             
-        # now, get other data
-        other_good,other_bad = split_fill_unfill_stations(self.other_data_df,self.this_station)
-        
-        # concatenate all the data
-        self.gs = pd.concat([self.gs,other_good],axis=1)
-        
-        '''
-        both_sets_of_stations = pd.concat([self.nearby_stations,self.other_stations],axis=0)
-        print(both_sets_of_stations)
-        print(self.gs.columns)
-        both_sets_of_stations = both_sets_of_stations[pd.Series(data=self.gs.columns)]
-        
-        print(both_sets_of_stations)
-        stophere
-        '''
-        
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
             self.model = None
@@ -150,8 +126,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    #folder = 'C:\Users\druth\Documents\epa_data\\'
+    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -286,7 +262,7 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
     
 # for a given set of stations, separate the ones that are full enough and those that aren't
 # only the full ones will be used
-def split_fill_unfill_stations(df,this_station):
+def feature_selection(df,this_station,stations_to_keep=7):
     
     good_stations = pd.DataFrame()
     bad_stations = pd.DataFrame()
@@ -303,17 +279,25 @@ def split_fill_unfill_stations(df,this_station):
         rate = identify_sampling_rate(col_vals)
         num_missing = len(col_while_missing[pd.isnull(col_vals)==True])
         portion_missing = float(num_missing)/float(len(col_while_missing))
-  
+          
         # criteria for using the site: mostly daily and not missing much
         enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.1)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
-            #print('   Corr with '+str(this_station.name)+': '+str(this_station.corr()))
         else:
             bad_stations = pd.concat([bad_stations,col_vals],axis=1)
+    
     print(str(len(good_stations.columns))+' good stations, '+str(len(bad_stations.columns))+' bad stations.')
-            
-    return good_stations, bad_stations
+    
+    corr_vals = pd.Series(index=good_stations.columns)
+    for station in corr_vals.index:
+        corr_vals[station] = good_stations[station].corr(this_station)
+    corr_vals = corr_vals.sort_values(ascending=False)
+    corr_vals = corr_vals[corr_vals>0]
+    cols_to_keep = corr_vals.index.tolist()[0:min(stations_to_keep,len(corr_vals))]
+    good_stations_filtered = good_stations.loc[:,cols_to_keep]
+        
+    return good_stations_filtered, bad_stations
     
 # fill in missing predictor values, keeping it as a df
 def fill_missing_predictors(predictors):    
@@ -383,7 +367,7 @@ def create_model_for_site(predictors,site):
 
     # neural network
     import sklearn.neural_network
-    hl_size = (10,7) # should probably depend on training data shape
+    hl_size = (5,3) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
@@ -697,7 +681,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         orig.loc[:,station] = station_obj.this_station.copy()
         
         # create and run a model to fill in missing data
-        station_obj.create_model(other_data.copy())
+        station_obj.create_model()
         station_obj.run_model()
         
         # store the object for this station and add the filled-in data to the composite dataset
