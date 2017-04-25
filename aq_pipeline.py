@@ -15,12 +15,12 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2014-01-01'
+start_date = '2013-01-01'
 end_date = '2015-12-01'
 
-latlon = (33.29898,-111.88431)
-r_max_interp = 25 # how far from latlon of interest should it look for stations?
-r_max_ML = 75 # for each station it finds, how far should it look aroud it in imputing the missing values?
+latlon = (38.650783,-121.506767)
+r_max_interp = 20 # how far from latlon of interest should it look for stations?
+r_max_ML = 150 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
 
@@ -31,7 +31,8 @@ all_data = aq.extract_raw_data(start_date,end_date)
 pm25_data = aq.extract_raw_data(start_date,end_date,param_code=88101)
 ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
 CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
-other_data = pd.concat([pm25_data,CO_data,ozone_data])
+#other_data = pd.concat([pm25_data,CO_data,ozone_data])
+other_data = pd.concat([pm25_data])
 other_data = other_data.set_index(pd.Series(data=range(len(other_data))))
 
 # filter out stations that are definitley too far away to be of any use.
@@ -41,7 +42,6 @@ all_data = aq.identify_nearby_stations(latlon,r_max_interp+r_max_ML,all_data,sta
 other_data = aq.identify_nearby_stations(latlon,r_max_interp+r_max_ML,other_data,start_date,end_date,ignore_closest=False)
 all_data = all_data.sort_values('Date Local')
 other_data = other_data.sort_values('Date Local')
-
 
 # run the algorithm
 data, target_data, results_noML, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)

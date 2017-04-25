@@ -78,7 +78,7 @@ class aq_station:
         ax1.set_ylabel(self.this_station.name)
         
         ax2 = fig.add_subplot(212) #,sharex=ax1
-        ax2.matshow(self.gs.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.gs.columns)])
+        ax2.matshow(self.gs.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.gs.columns)],origin='lower')
         ax2.set_yticklabels(self.gs.columns.values)
         ax2.set_yticks(range(0,len(self.gs.columns.values)))
         
@@ -265,7 +265,7 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
     # choose how many stations to keep based on how many datapoints there will be to train on
     if stations_to_keep is None:
-        stations_to_keep = max(3,int(len(this_station.index[pd.notnull(this_station)])/15))
+        stations_to_keep = min(10,max(3,int(len(this_station.index[pd.notnull(this_station)])/20)))
     
     corr_vals = pd.Series(index=good_stations.columns)
     for station in corr_vals.index:
@@ -347,7 +347,7 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl_size = (5,3) # should probably depend on training data shape
+    hl_size = (20,3) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''

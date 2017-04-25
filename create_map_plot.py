@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import numpy as np
 
-r_max = 250
+r_max = r_max_interp+r_max_ML
 
 fig = plt.figure(figsize=(15, 8), facecolor='w')    
 
