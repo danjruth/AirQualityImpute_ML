@@ -15,11 +15,11 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2014-01-01'
-end_date = '2015-12-01'
+start_date = '2012-01-01'
+end_date = '2014-12-31'
 
-latlon = (33.29898,-111.88431)
-r_max_interp = 20 # how far from latlon of interest should it look for stations?
+latlon = (33.687970,-84.29048)
+r_max_interp = 100 # how far from latlon of interest should it look for stations?
 r_max_ML = 200 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
@@ -42,8 +42,8 @@ all_data = aq.identify_nearby_stations(latlon,r_max_interp+r_max_ML,all_data,sta
 other_data = aq.identify_nearby_stations(latlon,r_max_interp+r_max_ML,other_data,start_date,end_date,ignore_closest=False)
 all_data = all_data.sort_values('Date Local')
 other_data = other_data.sort_values('Date Local')
-all_data = aq.addon_stationid(all_data)
-other_data = aq.addon_stationid(other_data)
+#all_data = aq.addon_stationid(all_data)
+#other_data = aq.addon_stationid(other_data)
 
 
 # run the algorithm

@@ -207,7 +207,7 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
     
 # create a column of station ids
 def addon_stationid(df):
-    print('adding station ids...')
+
     if 'station_ids' in df.columns:
         print('... the ids are already there!')
         return df
@@ -224,7 +224,6 @@ def addon_stationid(df):
     '''
     
     df['station_ids'] = station_ids    
-    print('... done adding station ids')
     
     return df
     
@@ -300,6 +299,9 @@ def feature_selection(df,this_station,stations_to_keep=None):
         portion_missing_while_missing = float(num_missing_while_missing)/float(len(missing_days))
         num_missing_while_known = len(col_while_known[pd.isnull(col_while_known)==True]) # missing days from (column when this_station is missing)
         portion_missing_while_known = float(num_missing_while_known)/float(len(known_days))
+        
+        # now that the portion missing is calculated, fill in the missing values
+        col_vals.loc[pd.isnull(col_vals)] = col_vals[pd.notnull(col_vals)].mean()
                   
         # criteria for using the site: mostly daily and not missing much
         enough_data = (rate==pd.Timedelta('1d')) & (portion_missing_while_missing < 0.1) & (portion_missing_while_known < 0.1)
@@ -312,13 +314,13 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
     # choose how many stations to keep based on how many datapoints there will be to train on
     if stations_to_keep is None:
-        stations_to_keep = min(10,max(3,int(len(this_station.index[pd.notnull(this_station)])/20)))
+        stations_to_keep = min(10,max(3,int(len(this_station.index[pd.notnull(this_station)])/25)))
     
     corr_vals = pd.Series(index=good_stations.columns)
     for station in corr_vals.index:
         corr_vals[station] = good_stations[station].corr(this_station)
     corr_vals = corr_vals.sort_values(ascending=False)
-    #corr_vals = corr_vals[corr_vals>0]
+    corr_vals = corr_vals[corr_vals>0]
     cols_to_keep = corr_vals.index.tolist()[0:min(stations_to_keep,len(corr_vals))]
     good_stations_filtered = good_stations.loc[:,cols_to_keep]
         
@@ -364,7 +366,7 @@ def create_model_for_site(predictors,site):
     
     # split into known/unknown datapoints
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
-    if len(known_y)<5:
+    if len(known_y)<20:
         print('Not enough known values for this station!')
         return None
     
@@ -394,7 +396,7 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl_size = (20,3) # should probably depend on training data shape
+    hl_size = (max(1,int(len(predictors.columns)*0.75))) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
@@ -471,6 +473,7 @@ def fill_with_model(predictors,site,model):
     # replace missing with the simulated, returning the composite
     composite_series = site.copy() # start with site data
     composite_series[pd.isnull(site)] = predicted_y.copy()
+    composite_series.loc[composite_series<0] = 0 # just in case
     
     return composite_series    
     
