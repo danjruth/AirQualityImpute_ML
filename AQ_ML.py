@@ -12,6 +12,16 @@ import matplotlib.pyplot as plt
 # some constants
 R_earth =  6371.0 # [km]
 
+def matshow_dates(df,ax):
+    import matplotlib.dates as mdates
+    xlims = [mdates.date2num(pd.to_datetime(df.index[x])) for x in[0,-1]]
+    ax.matshow(df.copy().transpose(),aspect='auto',extent=[xlims[0],xlims[1],0,len(df.columns)],origin='lower')
+    ax.set_yticklabels(df.columns.values)
+    ax.set_yticks([x+0.5 for x in range(0,len(df.columns.values))])
+    ax.xaxis.tick_bottom()
+    ax.xaxis_date()
+    return ax
+
 # plot a matrix of nearby station values, labeling each station
 def matrix_val_plot(df,fig=None):
     if fig==None:
@@ -21,6 +31,16 @@ def matrix_val_plot(df,fig=None):
     ax.set_yticklabels(df.columns.values)
     ax.set_yticks(range(0,len(df.columns.values)))
     return fig
+    
+def compare_dfs_plot(composite,original):
+    fig = plt.figure(figsize=(7,9))
+    
+    ax1 = fig.add_subplot(211)
+    ax2 = fig.add_subplot(212,sharex=ax1)
+    
+    matshow_dates(original,ax1)
+    matshow_dates(composite,ax2)
+    
 
 # class for a station that'll have data imputed
 class aq_station:
@@ -67,27 +87,26 @@ class aq_station:
         
     def plot_matrix_station(self):
         
+        import matplotlib.dates as mdates
+        import datetime as dt
+                
         fig = plt.figure(figsize=(12,6))
-        
-        first_day = self.nearby_data_df.index[0]
 
         ax1 = fig.add_subplot(211)
-        days_array = np.arange((self.this_station.index[0]-first_day)/pd.Timedelta('1D'),(self.this_station.index[-1]-first_day)/pd.Timedelta('1D')+1)
         
-        ax1.plot(self.this_station,'.-')
+        ax2 = fig.add_subplot(212,sharex=ax1)
+        matshow_dates(self.gs,ax2)
+        
+        ax1.plot(self.composite_data,'.-',color='red',label='Imputed data')
+        ax1.plot(self.this_station,'.-',lw=2,color='k',label='Original data')
         ax1.set_ylabel(self.this_station.name)
-        
-        ax2 = fig.add_subplot(212) #,sharex=ax1
-        ax2.matshow(self.gs.copy().transpose(),aspect='auto',extent=[0,len(days_array),0,len(self.gs.columns)],origin='lower')
-        ax2.set_yticklabels(self.gs.columns.values)
-        ax2.set_yticks(range(0,len(self.gs.columns.values)))
         
         return fig        
         
     def create_model(self):
         
         # determine which features should be used for this model
-        self.gs,bs = feature_selection(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
+        self.gs,self.bs = feature_selection(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
             
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
@@ -97,19 +116,21 @@ class aq_station:
         # fill missing predictors
         self.gs = fill_missing_predictors(self.gs)
         
-        # plot the features and the value to predict
-        self.plot_matrix_station()
+        
         
         # create a model
         self.model = create_model_for_site(self.gs,self.this_station)
         
-    def run_model(self):        
+    def run_model(self):
         self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
+        
+        # plot the features and the value to predict
+        self.plot_matrix_station()
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    #folder = 'C:\Users\druth\Documents\epa_data\\'
+    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -684,8 +705,8 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         
     # plot the predicted, original, and composite data
     final_big_plot(data,orig,composite_data,stations)    
-    matrix_val_plot(orig)
-    matrix_val_plot(composite_data)    
+    compare_dfs_plot(composite_data,orig)
+    
     
     print('Stations used for the interpolation:')
     print(stations)

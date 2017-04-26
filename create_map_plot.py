@@ -14,9 +14,9 @@ r_max = r_max_interp+r_max_ML
 fig = plt.figure(figsize=(15, 8), facecolor='w')    
 
 # set viewing window for map plot
-scale_factor = 60.0 # lat/lon coords to show from center point per km of r_max
-left_lim = latlon[1]-r_max/scale_factor
-right_lim = latlon[1]+r_max/scale_factor
+scale_factor = 100.0 # lat/lon coords to show from center point per km of r_max
+left_lim = latlon[1]-1.2*r_max/scale_factor
+right_lim = latlon[1]+1.2*r_max/scale_factor
 bottom_lim = latlon[0]-r_max/scale_factor
 top_lim = latlon[0]+r_max/scale_factor
 
