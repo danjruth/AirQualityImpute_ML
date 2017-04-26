@@ -108,8 +108,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    folder = 'C:\Users\druth\Documents\epa_data\\'
+    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -204,7 +204,8 @@ def remove_dup_stations(param_stations,ignore_closest=False):
     
     return param_stations
     
-# pick out the values from stations nearby
+# pick out the values from stations nearby.
+# this is called separately for the main and auxilliary dataframes
 def extract_nearby_values(stations,all_data,start_date,end_date):
     
     print('Extracting nearby values...')
@@ -242,6 +243,7 @@ def feature_selection(df,this_station,stations_to_keep=None):
     bad_stations = pd.DataFrame()
     
     missing_days = this_station.index[pd.isnull(this_station)]
+    print('There are '+str(len(missing_days))+' missing days out of '+str(len(this_station))+' total days for this station.')
                                       
     if len(missing_days)==0:
         missing_days = this_station.index
@@ -249,10 +251,10 @@ def feature_selection(df,this_station,stations_to_keep=None):
     # look at each column (data for a given station) and see if it's good or bad
     for column in df:
         col_vals = df[column]
-        col_while_missing = col_vals[missing_days]
+        col_while_missing = col_vals[missing_days] # column while this_station is missing values
         rate = identify_sampling_rate(col_vals)
-        num_missing = len(col_while_missing[pd.isnull(col_vals)==True])
-        portion_missing = float(num_missing)/float(len(col_while_missing))
+        num_missing = len(col_while_missing[pd.isnull(col_vals)==True]) # missing days from (column when this_station is missing)
+        portion_missing = float(num_missing)/float(len(missing_days))
           
         # criteria for using the site: mostly daily and not missing much
         enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.1)
@@ -271,7 +273,7 @@ def feature_selection(df,this_station,stations_to_keep=None):
     for station in corr_vals.index:
         corr_vals[station] = good_stations[station].corr(this_station)
     corr_vals = corr_vals.sort_values(ascending=False)
-    corr_vals = corr_vals[corr_vals>0]
+    #corr_vals = corr_vals[corr_vals>0]
     cols_to_keep = corr_vals.index.tolist()[0:min(stations_to_keep,len(corr_vals))]
     good_stations_filtered = good_stations.loc[:,cols_to_keep]
         
