@@ -207,11 +207,24 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
     
 # create a column of station ids
 def addon_stationid(df):
+    print('adding station ids...')
+    if 'station_ids' in df.columns:
+        print('... the ids are already there!')
+        return df
     # create column of station ids. this will be the index
+    
+    u_col = pd.Series(index=df.index,data='_')
+    
+    station_ids = df['Parameter Code'].map(str)+u_col+df['State Code'].map(str)+u_col+df['County Code'].map(str)+u_col+df['Site Number'].map(str)+u_col+df['POC'].map(str)
+    
+    '''
     station_ids = pd.Series(index=df.index)
     for i in station_ids.index:
         station_ids.loc[i] = str(df.loc[i]['Parameter Code'])+'_'+str(df.loc[i]['State Code'])+'_'+str(df.loc[i]['County Code'])+'_'+str(df.loc[i]['Site Number'])+'_'+str(df.loc[i]['POC'])
+    '''
+    
     df['station_ids'] = station_ids    
+    print('... done adding station ids')
     
     return df
     
