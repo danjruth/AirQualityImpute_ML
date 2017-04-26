@@ -100,6 +100,10 @@ class aq_station:
         ax1.plot(self.composite_data,'.-',color='red',label='Imputed data')
         ax1.plot(self.this_station,'.-',lw=2,color='k',label='Original data')
         ax1.set_ylabel(self.this_station.name)
+        ax1.legend()
+        
+        plt.show()
+        plt.pause(.1)
         
         return fig        
         
@@ -115,8 +119,6 @@ class aq_station:
             
         # fill missing predictors
         self.gs = fill_missing_predictors(self.gs)
-        
-        
         
         # create a model
         self.model = create_model_for_site(self.gs,self.this_station)
@@ -264,6 +266,7 @@ def feature_selection(df,this_station,stations_to_keep=None):
     bad_stations = pd.DataFrame()
     
     missing_days = this_station.index[pd.isnull(this_station)]
+    known_days = this_station.index[pd.notnull(this_station)]
     print('There are '+str(len(missing_days))+' missing days out of '+str(len(this_station))+' total days for this station.')
                                       
     if len(missing_days)==0:
@@ -271,14 +274,22 @@ def feature_selection(df,this_station,stations_to_keep=None):
 
     # look at each column (data for a given station) and see if it's good or bad
     for column in df:
+        
         col_vals = df[column]
         col_while_missing = col_vals[missing_days] # column while this_station is missing values
+        col_while_known = col_vals[known_days]
+        
         rate = identify_sampling_rate(col_vals)
-        num_missing = len(col_while_missing[pd.isnull(col_vals)==True]) # missing days from (column when this_station is missing)
-        portion_missing = float(num_missing)/float(len(missing_days))
-          
+        
+        # identify the portion of values missing from this predictor station (col) while
+        # we also are/are not missing values from the station to predict (this_station).
+        num_missing_while_missing = len(col_while_missing[pd.isnull(col_while_missing)==True]) # missing days from (column when this_station is missing)
+        portion_missing_while_missing = float(num_missing_while_missing)/float(len(missing_days))
+        num_missing_while_known = len(col_while_known[pd.isnull(col_while_known)==True]) # missing days from (column when this_station is missing)
+        portion_missing_while_known = float(num_missing_while_known)/float(len(known_days))
+                  
         # criteria for using the site: mostly daily and not missing much
-        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing < 0.1)
+        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing_while_missing < 0.1) & (portion_missing_while_known < 0.1)
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
         else:
@@ -490,14 +501,11 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata):
     # perform weighted average of stations for this day 
     for date in dates:
         
-        #print(date)
-        
         # get weights for this day
         available_stations = list()
         for station in nearby_data.columns:
             if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index):
                 available_stations.append(station)
-        #print(available_stations)
         useful_metadata = nearby_metadata.copy().loc[available_stations,:]
         useful_metadata = create_station_weights(useful_metadata)
                 
