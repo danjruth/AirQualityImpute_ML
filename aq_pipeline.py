@@ -15,12 +15,12 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2012-01-01'
-end_date = '2014-12-31'
+start_date = '2011-01-01'
+end_date = '2015-12-31'
 
-latlon = (33.687970,-84.29048)
-r_max_interp = 100 # how far from latlon of interest should it look for stations?
-r_max_ML = 200 # for each station it finds, how far should it look aroud it in imputing the missing values?
+latlon = (28.028889,-81.972222)
+r_max_interp = 200 # how far from latlon of interest should it look for stations?
+r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
 

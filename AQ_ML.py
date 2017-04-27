@@ -131,8 +131,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    folder = 'C:\Users\druth\Documents\epa_data\\'
+    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -208,9 +208,11 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
 # create a column of station ids
 def addon_stationid(df):
 
+    '''
     if 'station_ids' in df.columns:
         print('... the ids are already there!')
         return df
+    '''
     # create column of station ids. this will be the index
     
     u_col = pd.Series(index=df.index,data='_')
@@ -312,9 +314,9 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
     print(str(len(good_stations.columns))+' good stations, '+str(len(bad_stations.columns))+' bad stations.')
     
-    # choose how many stations to keep based on how many datapoints there will be to train on
+    # choose how many stations to keep based on how many samples there will be to train on
     if stations_to_keep is None:
-        stations_to_keep = min(10,max(3,int(len(this_station.index[pd.notnull(this_station)])/25)))
+        stations_to_keep = min(15,max(1,int(len(this_station.index[pd.notnull(this_station)])/8)))
     
     corr_vals = pd.Series(index=good_stations.columns)
     for station in corr_vals.index:
@@ -396,7 +398,7 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl_size = (max(1,int(len(predictors.columns)*0.75))) # should probably depend on training data shape
+    hl_size = (max(1,int(len(predictors.columns)*0.5))) # should probably depend on training data shape
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
@@ -419,6 +421,10 @@ def create_model_for_site(predictors,site):
     r2_ML_train = r2_score(known_y[train_indx],model_train_predicted)
     
     # choose which model to use based on testing r2 value
+    if (r2_ML_test < 0) and (r2_lin_test < 0):
+        print('Both r2s < 0, not creating a model.')
+        return None
+        
     if r2_ML_test > r2_lin_test:
         model = model
     else:
@@ -643,6 +649,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
     stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date) # look at the data to find ones close enough
     stations = addon_stationid(stations) # give each an id
     stations = remove_dup_stations(stations) # remove the duplicates
+    stations = stations.ix[0:min(8,len(stations)),:]
 
     # get rid of the closest station if you want to use that for validation.
     # also save its reading so you can compare later
