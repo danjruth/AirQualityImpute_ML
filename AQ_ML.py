@@ -131,8 +131,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    #folder = 'C:\Users\druth\Documents\epa_data\\'
+    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
