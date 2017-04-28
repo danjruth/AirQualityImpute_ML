@@ -15,7 +15,7 @@ R_earth =  6371.0 # [km]
 def matshow_dates(df,ax):
     import matplotlib.dates as mdates
     xlims = [mdates.date2num(pd.to_datetime(df.index[x])) for x in[0,-1]]
-    ax.matshow(df.copy().transpose(),aspect='auto',extent=[xlims[0],xlims[1],0,len(df.columns)],origin='lower')
+    ax.matshow(df.copy().transpose(),aspect='auto',extent=[xlims[0],xlims[1],len(df.columns),0],origin='upper')
     ax.set_yticklabels(df.columns.values)
     ax.set_yticks([x+0.5 for x in range(0,len(df.columns.values))])
     ax.xaxis.tick_bottom()
@@ -23,6 +23,7 @@ def matshow_dates(df,ax):
     return ax
 
 # plot a matrix of nearby station values, labeling each station
+'''
 def matrix_val_plot(df,fig=None):
     if fig==None:
         fig = plt.figure()
@@ -31,6 +32,7 @@ def matrix_val_plot(df,fig=None):
     ax.set_yticklabels(df.columns.values)
     ax.set_yticks(range(0,len(df.columns.values)))
     return fig
+'''
     
 def compare_dfs_plot(composite,original):
     fig = plt.figure(figsize=(7,9))
@@ -322,9 +324,10 @@ def feature_selection(df,this_station,stations_to_keep=None):
     for station in corr_vals.index:
         corr_vals[station] = good_stations[station].corr(this_station)
     corr_vals = corr_vals.sort_values(ascending=False)
-    corr_vals = corr_vals[corr_vals>0]
+    corr_vals = corr_vals[corr_vals>0.25]
     cols_to_keep = corr_vals.index.tolist()[0:min(stations_to_keep,len(corr_vals))]
     good_stations_filtered = good_stations.loc[:,cols_to_keep]
+    #good_stations_filtered['date'] = 
         
     return good_stations_filtered, bad_stations
     
