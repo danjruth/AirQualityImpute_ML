@@ -18,7 +18,7 @@ import numpy as np
 start_date = '2011-01-01'
 end_date = '2015-12-31'
 
-latlon = (28.028889,-81.972222)
+latlon = (35.10732,-118.950165)
 r_max_interp = 250 # how far from latlon of interest should it look for stations?
 r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
@@ -31,7 +31,7 @@ all_data = aq.extract_raw_data(start_date,end_date,param_code=81102)
 pm25_data = aq.extract_raw_data(start_date,end_date,param_code=88101)
 ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
 CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
-other_data = pd.concat([pm25_data,CO_data])
+other_data = pd.concat([pm25_data,CO_data,ozone_data])
 #other_data = pd.concat([pm25_data])
 other_data = other_data.set_index(pd.Series(data=range(len(other_data)))) # reindex to get rid of duplicate indices (index here is not significant)
 
@@ -45,20 +45,25 @@ other_data = other_data.sort_values('Date Local')
 #all_data = aq.addon_stationid(all_data)
 #other_data = aq.addon_stationid(other_data)
 
+data, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=False,return_lots=True)
+data_noML = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,0,all_data,other_data,ignore_closest=False,return_lots=False)
 
+plt.plot()
+
+'''
 # run the algorithm
 data, target_data, results_noML, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)
 
 # construct dataframe to facilitate comparison between methods
 compare_df = pd.DataFrame()
-compare_df['predicted'] = data
-compare_df['predicted_noML'] = results_noML
-compare_df['target'] = target_data
+compare_df['predicted'] = data.copy()
+compare_df['predicted_noML'] = results_noML.copy()
+compare_df['target'] = target_data.copy()
 compare_df_all = compare_df.copy()
 # only keep rows for which there is target data to compare against
 compare_df = compare_df[np.isfinite(compare_df['target'])]
 #compare_df = compare_df.fillna(0) # think more about this
-compare_df = compare_df.fillna(method='ffill')
+compare_df = compare_df.fillna(method='ffill').fillna(method='bfill')
 
 ## Compute/print some metrics
 
@@ -142,3 +147,4 @@ plt.show()
 
 
 # make a nice plot
+'''

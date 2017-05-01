@@ -335,7 +335,7 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
     # choose how many stations to keep based on how many samples there will be to train on
     if stations_to_keep is None:
-        stations_to_keep = min(15,max(1,int(len(this_station.index[pd.notnull(this_station)])/12)))
+        stations_to_keep = min(15,max(1,int(len(known_days)/20)))
     
     corr_vals = pd.Series(index=good_stations.columns)
     for station in corr_vals.index:
@@ -513,11 +513,13 @@ def fill_with_model(predictors,site,model):
     
 # once nearby stations have been picked, add on a column of their weights (for
 # the spatial interpolation algorithm)
-def create_station_weights(nearby_metadata):
+def create_station_weights(nearby_metadata,max_stations=10):
     
     # determine the weighting for the stations
     station_weights = pd.Series(index=nearby_metadata.index)
+    nearby_metadata = nearby_metadata.ix[0:min(max_stations,len(nearby_metadata)),:]
     num_stations = len(nearby_metadata)
+    
     for station in nearby_metadata.index:
         # average distance between this site and others
         total_dist = 0
@@ -541,7 +543,7 @@ def create_station_weights(nearby_metadata):
     
 # re-compute the station weights based on which stations have available data.
 # nearby_metadata is used to just take out the "available stations"
-def spatial_interp_variable_weights(nearby_data,nearby_metadata):
+def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10):
     
     #print(nearby_metadata)
     
@@ -551,13 +553,15 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata):
     # perform weighted average of stations for this day 
     for date in dates:
         
+        print(date)
+        
         # get weights for this day
         available_stations = list()
         for station in nearby_data.columns:
-            if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index):
+            if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index) and (len(available_stations)<max_stations):
                 available_stations.append(station)
         useful_metadata = nearby_metadata.copy().loc[available_stations,:]
-        useful_metadata = create_station_weights(useful_metadata)
+        useful_metadata = create_station_weights(useful_metadata,max_stations=max_stations)
                 
         weights_sum = 0
         values_sum = 0
@@ -677,7 +681,8 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
     stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date) # look at the data to find ones close enough
     stations = addon_stationid(stations) # give each an id
     stations = remove_dup_stations(stations) # remove the duplicates
-    stations = stations.ix[0:min(8,len(stations)),:]
+    all_stations = stations.copy()
+    #stations = stations.ix[0:min(8,len(stations)),:]
 
     # get rid of the closest station if you want to use that for validation.
     # also save its reading so you can compare later
@@ -703,12 +708,14 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         
         # try predicting the values without filling in missing ones with ML
         print('Predicting the values at this station without imputation...')
-        results_noML = spatial_interp_variable_weights(closest_obj.nearby_data_df,stations)
+        results_noML = spatial_interp_variable_weights(closest_obj.nearby_data_df,stations,max_stations=10)
         plt.figure()
         plt.plot(results_noML,label='results, no ML')
         plt.plot(target_data,label='target')
         plt.legend()
         plt.show()
+    else:
+        closest_obj = None
     
     # metadata for stations used in the spatial interpolation
     stations = create_station_weights(stations)    
@@ -731,7 +738,10 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         station_obj = None
         
         # initialize a station with its name and coordinates
-        station_obj = aq_station(station,ignoring=closest_obj.latlon)
+        if closest_obj is not None:
+            station_obj = aq_station(station,ignoring=closest_obj.latlon)
+        else:
+            station_obj = aq_station(station,ignoring=None)
         station_obj.latlon = (stations.loc[station,'Latitude'],stations.loc[station,'Longitude'])
         station_obj.start_date = start_date
         station_obj.end_date = end_date
@@ -808,7 +818,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         '''
             
         if return_lots == True:
-            return data, target_data, results_noML, station_obj_list, composite_data, orig
+            return data, target_data, results_noML, station_obj_list, composite_data, orig, all_stations
         else:
             return data, target_data, results_noML
     
@@ -817,4 +827,4 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         if return_lots==False:
             return data
         else:
-            return data, station_obj_list, composite_data, orig
+            return data, station_obj_list, composite_data, orig, all_stations
