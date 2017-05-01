@@ -15,8 +15,12 @@ R_earth =  6371.0 # [km]
 def matshow_dates(df,ax):
     import matplotlib.dates as mdates
     xlims = [mdates.date2num(pd.to_datetime(df.index[x])) for x in[0,-1]]
+    #from sklearn.preprocessing import scale
+    #ax.matshow(scale(df.copy().transpose(),axis=1),aspect='auto',extent=[xlims[0],xlims[1],len(df.columns),0],origin='upper')
     ax.matshow(df.copy().transpose(),aspect='auto',extent=[xlims[0],xlims[1],len(df.columns),0],origin='upper')
+    #tick_labels = ['Predictor '+str(i) for i in range(len(df.columns))]
     ax.set_yticklabels(df.columns.values)
+    #ax.set_yticklabels(tick_labels)
     ax.set_yticks([x+0.5 for x in range(0,len(df.columns.values))])
     ax.xaxis.tick_bottom()
     ax.xaxis_date()
@@ -77,6 +81,11 @@ class aq_station:
             self.this_station = pd.Series()
             print('No data for this station!')
         self.nearby_data_df = self.nearby_data_df.drop(self.station_id, axis=1) # get rid of the closest data: this is the target data, not used in training
+        nearby_yesterday = self.nearby_data_df.copy()
+        nearby_yesterday.index = nearby_yesterday.index + pd.Timedelta('1D')
+        nearby_yesterday = nearby_yesterday.reindex(index=self.nearby_data_df.index)
+        nearby_yesterday.columns = [x+'_y' for x in nearby_yesterday.columns]
+        #self.nearby_data_df = pd.concat([self.nearby_data_df,nearby_yesterday],axis=1)
         
         # get the data for the other stations
         self.other_stations = identify_nearby_stations(self.latlon,r_max,other_data,self.start_date,self.end_date)
@@ -86,6 +95,11 @@ class aq_station:
             print('   Removing stations with latitude '+str(self.ignoring[0]))
             self.other_stations = self.other_stations[self.other_stations['Latitude']!=self.ignoring[0]].copy()
         self.other_data_df = extract_nearby_values(self.other_stations,other_data,self.start_date,self.end_date)
+        other_yesterday = self.other_data_df.copy()
+        other_yesterday.index = other_yesterday.index + pd.Timedelta('1D')
+        other_yesterday = other_yesterday.reindex(index=self.other_data_df.index)
+        other_yesterday.columns = [x+'_y' for x in other_yesterday.columns]
+        #self.other_data_df = pd.concat([self.other_data_df,other_yesterday],axis=1)
         
     def plot_matrix_station(self):
         
@@ -93,6 +107,8 @@ class aq_station:
         import datetime as dt
                 
         fig = plt.figure(figsize=(12,6))
+        if self.gs.empty:
+            return fig
 
         ax1 = fig.add_subplot(211)
         
@@ -102,6 +118,7 @@ class aq_station:
         ax1.plot(self.composite_data,'.-',color='red',label='Imputed data')
         ax1.plot(self.this_station,'.-',lw=2,color='k',label='Original data')
         ax1.set_ylabel(self.this_station.name)
+        #ax1.set_ylabel('Output station')
         ax1.legend()
         
         plt.show()
@@ -119,7 +136,7 @@ class aq_station:
             self.model = None
             return
             
-        # fill missing predictors
+        # fill missing predictors and normalize the inputs
         self.gs = fill_missing_predictors(self.gs)
         
         # create a model
@@ -318,7 +335,7 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
     # choose how many stations to keep based on how many samples there will be to train on
     if stations_to_keep is None:
-        stations_to_keep = min(15,max(1,int(len(this_station.index[pd.notnull(this_station)])/8)))
+        stations_to_keep = min(15,max(1,int(len(this_station.index[pd.notnull(this_station)])/12)))
     
     corr_vals = pd.Series(index=good_stations.columns)
     for station in corr_vals.index:
@@ -341,9 +358,13 @@ def fill_missing_predictors(predictors):
         
     import sklearn.preprocessing
     imp = sklearn.preprocessing.Imputer(missing_values='NaN', strategy='mean', axis=0) # impute along columns
-    predictors_filled = imp.fit_transform(predictors).copy()
+    predictors_filled = imp.fit_transform(predictors.copy())
     predictors_filled_df = pd.DataFrame(index=predictors.index,columns=predictors.columns,data=predictors_filled)
-        
+    
+    
+    from scipy.stats import zscore
+    predictors_filled_df = predictors_filled_df.apply(zscore)
+
     return predictors_filled_df
     
 # based on which values for the site are available, split up predictors/known
@@ -367,7 +388,9 @@ def create_model_for_site(predictors,site):
     
     from sklearn.metrics import r2_score
     
+    
     print('Creating a model for '+str(site.name))
+    
     
     # split into known/unknown datapoints
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
@@ -401,8 +424,8 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl_size = (max(1,int(len(predictors.columns)*0.5))) # should probably depend on training data shape
-    model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
+    hl_size = (max(1,int(len(predictors.columns)*.5))) # should probably depend on training data shape
+    model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='tanh')
     
     '''
     # SVM
@@ -447,7 +470,7 @@ def create_model_for_site(predictors,site):
     ax1.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
     ax1.set_xlabel('Target')
     ax1.set_ylabel('Predicted')
-    ax1.set_title('Machine Learning')
+    ax1.set_title('Machine Learning, r2 = '+str(r2_ML_test))
     ax1.legend(loc=4)
     
     ax2 = fig.add_subplot(122)
@@ -456,7 +479,7 @@ def create_model_for_site(predictors,site):
     ax2.plot([0, np.max(known_y)],[0, np.max(known_y)],color='k')
     ax2.set_xlabel('Target')
     ax2.set_ylabel('Predicted')
-    ax2.set_title('Linear Model')
+    ax2.set_title('Linear Model, r2 = '+str(r2_lin_test))
     ax2.legend(loc=4)
     
     #plt.title(str(r2_ML_test)+', '+str(r2_ML_train))
@@ -478,6 +501,8 @@ def fill_with_model(predictors,site,model):
     # split known/unknown, simulate
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)    
     predicted_y = model.predict(unknown_x)
+    
+    
         
     # replace missing with the simulated, returning the composite
     composite_series = site.copy() # start with site data

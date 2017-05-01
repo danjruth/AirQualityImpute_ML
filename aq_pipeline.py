@@ -18,7 +18,7 @@ import numpy as np
 start_date = '2011-01-01'
 end_date = '2015-12-31'
 
-latlon = (	39.838119,	-104.949840)
+latlon = (28.028889,-81.972222)
 r_max_interp = 250 # how far from latlon of interest should it look for stations?
 r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
@@ -26,14 +26,14 @@ r_max_ML = 250 # for each station it finds, how far should it look aroud it in i
 
 # get the raw daa
 
-all_data = aq.extract_raw_data(start_date,end_date)
+all_data = aq.extract_raw_data(start_date,end_date,param_code=81102)
 
 pm25_data = aq.extract_raw_data(start_date,end_date,param_code=88101)
-#ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
+ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
 CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
 other_data = pd.concat([pm25_data,CO_data])
 #other_data = pd.concat([pm25_data])
-other_data = other_data.set_index(pd.Series(data=range(len(other_data))))
+other_data = other_data.set_index(pd.Series(data=range(len(other_data)))) # reindex to get rid of duplicate indices (index here is not significant)
 
 # filter out stations that are definitley too far away to be of any use.
 # we know nothing farther than r_max_interp+r_max_ML will be used.
@@ -55,9 +55,10 @@ compare_df['predicted'] = data
 compare_df['predicted_noML'] = results_noML
 compare_df['target'] = target_data
 compare_df_all = compare_df.copy()
-# only keep rows for which there is target data to compare against; fill missing predicted values with 0?
+# only keep rows for which there is target data to compare against
 compare_df = compare_df[np.isfinite(compare_df['target'])]
-compare_df = compare_df.fillna(0) # think more about this
+#compare_df = compare_df.fillna(0) # think more about this
+compare_df = compare_df.fillna(method='ffill')
 
 ## Compute/print some metrics
 
@@ -103,8 +104,8 @@ print(mae_roll,mae_roll_noML)
 # plot the results against target data
 fig = plt.figure(figsize=(12,6))
 ax1 = fig.add_subplot(211)
-ax1.plot(results_noML,'.-',color='gray',label='predicted, no ML')
-ax1.plot(data,'.-',color='k',label='predicted')
+ax1.plot(results_noML,'.-',color='gray',label='predicted, without imputation')
+ax1.plot(data,'.-',color='k',label='predicted, with imputation')
 ax1.plot(target_data,'.-',color='green',label='target')
 ax1.legend()
 ax1.set_title('Instantaneous')
@@ -112,8 +113,8 @@ plt.show()
 
 # plot the results against target data
 ax2 = fig.add_subplot(212,sharex=ax1,sharey=ax1)
-ax2.plot(results_noML.rolling(window=win,min_periods=0).mean(),'.-',color='gray',label='predicted, no ML')
-ax2.plot(data.rolling(window=win,min_periods=0).mean(),'.-',color='k',label='predicted')
+ax2.plot(results_noML.rolling(window=win,min_periods=0).mean(),'.-',color='gray',label='predicted, without imputation')
+ax2.plot(data.rolling(window=win,min_periods=0).mean(),'.-',color='k',label='predicted, with imputation')
 ax2.plot(target_data.rolling(window=win,min_periods=0).mean(),'.-',color='green',label='target')
 ax2.set_title('Rolling')
 ax2.legend()
