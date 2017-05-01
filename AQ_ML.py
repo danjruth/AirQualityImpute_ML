@@ -558,10 +558,12 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
         # get weights for this day
         available_stations = list()
         for station in nearby_data.columns:
-            if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index) and (len(available_stations)<max_stations):
-                available_stations.append(station)
+            if len(available_stations) < max_stations:
+                if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index):
+                    available_stations.append(station)
         useful_metadata = nearby_metadata.copy().loc[available_stations,:]
         useful_metadata = create_station_weights(useful_metadata,max_stations=max_stations)
+        print(useful_metadata)
                 
         weights_sum = 0
         values_sum = 0
@@ -708,6 +710,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         
         # try predicting the values without filling in missing ones with ML
         print('Predicting the values at this station without imputation...')
+        print(closest_obj.nearby_data_df)
         results_noML = spatial_interp_variable_weights(closest_obj.nearby_data_df,stations,max_stations=10)
         plt.figure()
         plt.plot(results_noML,label='results, no ML')

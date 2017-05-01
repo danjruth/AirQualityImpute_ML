@@ -15,10 +15,10 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2011-01-01'
+start_date = '2015-01-01'
 end_date = '2015-12-31'
 
-latlon = (35.10732,-118.950165)
+latlon = (38.650783,-121.506767)
 r_max_interp = 250 # how far from latlon of interest should it look for stations?
 r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
@@ -45,14 +45,9 @@ other_data = other_data.sort_values('Date Local')
 #all_data = aq.addon_stationid(all_data)
 #other_data = aq.addon_stationid(other_data)
 
-data, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=False,return_lots=True)
-data_noML = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,0,all_data,other_data,ignore_closest=False,return_lots=False)
 
-plt.plot()
-
-'''
 # run the algorithm
-data, target_data, results_noML, station_obj_list, composite_data, orig = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)
+data, target_data, results_noML, station_obj_list, composite_data, orig, all_stations = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)
 
 # construct dataframe to facilitate comparison between methods
 compare_df = pd.DataFrame()
@@ -143,8 +138,3 @@ plt.legend()
 plt.ylabel('Predicted')
 plt.xlabel('Target')
 plt.show()
-
-
-
-# make a nice plot
-'''
