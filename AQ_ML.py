@@ -552,16 +552,27 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
     
     # perform weighted average of stations for this day 
     for date in dates:
-        
+                
         print(date)
         
         # get weights for this day
-        available_stations = list()
+        this_days_readings = nearby_data.loc[date,:]
+        print(this_days_readings)
+        this_days_notnulls = this_days_readings[pd.notnull(this_days_readings)]
+        print(this_days_notnulls)
+        available_stations = list(this_days_notnulls.index)
+        print(available_stations)
+        #available_stations = available_stations[0:min(len(available_stations),max_stations)]
+        #print(available_stations)
+        '''
         for station in nearby_data.columns:
             if len(available_stations) < max_stations:
                 if pd.notnull(nearby_data.loc[date,station]) and (station in nearby_metadata.index):
                     available_stations.append(station)
+        '''
         useful_metadata = nearby_metadata.copy().loc[available_stations,:]
+        print(useful_metadata)
+        useful_metadata = useful_metadata.iloc[0:min(len(available_stations),max_stations)]
         useful_metadata = create_station_weights(useful_metadata,max_stations=max_stations)
         print(useful_metadata)
                 
