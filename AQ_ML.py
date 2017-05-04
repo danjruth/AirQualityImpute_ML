@@ -150,8 +150,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    #folder = 'C:\Users\druth\Documents\epa_data\\'
+    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -424,7 +424,7 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl_size = (max(1,int(len(predictors.index)/len(predictors.columns)/50))) # should probably depend on training data shape
+    hl_size = (max(2,int(num_known/100))) # should probably depend on training data shape
     print(str(hl_size)+' hidden layer nodes.')
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
@@ -554,7 +554,7 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
     # perform weighted average of stations for this day 
     for date in dates:
                 
-        print(date)
+        #print(date)
         
         # get weights for this day
         this_days_readings = nearby_data.loc[date,:]
