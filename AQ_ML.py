@@ -150,8 +150,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    folder = 'C:\Users\druth\Documents\epa_data\\'
+    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -424,8 +424,9 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl_size = (max(1,int(len(predictors.columns)*.5))) # should probably depend on training data shape
-    model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='tanh')
+    hl_size = (max(1,int(len(predictors.index)/len(predictors.columns)/50))) # should probably depend on training data shape
+    print(str(hl_size)+' hidden layer nodes.')
+    model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
     
     '''
     # SVM
@@ -517,7 +518,7 @@ def create_station_weights(nearby_metadata,max_stations=10):
     
     # determine the weighting for the stations
     station_weights = pd.Series(index=nearby_metadata.index)
-    nearby_metadata = nearby_metadata.ix[0:min(max_stations,len(nearby_metadata)),:]
+    #nearby_metadata = nearby_metadata.ix[0:min(max_stations,len(nearby_metadata)),:]
     num_stations = len(nearby_metadata)
     
     for station in nearby_metadata.index:
@@ -557,11 +558,11 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
         
         # get weights for this day
         this_days_readings = nearby_data.loc[date,:]
-        print(this_days_readings)
+        #print(this_days_readings)
         this_days_notnulls = this_days_readings[pd.notnull(this_days_readings)]
-        print(this_days_notnulls)
+        #print(this_days_notnulls)
         available_stations = list(this_days_notnulls.index)
-        print(available_stations)
+        #print(available_stations)
         #available_stations = available_stations[0:min(len(available_stations),max_stations)]
         #print(available_stations)
         '''
@@ -571,17 +572,17 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
                     available_stations.append(station)
         '''
         useful_metadata = nearby_metadata.copy().loc[available_stations,:]
-        print(useful_metadata)
+        #print(useful_metadata)
         useful_metadata = useful_metadata.iloc[0:min(len(available_stations),max_stations)]
         useful_metadata = create_station_weights(useful_metadata,max_stations=max_stations)
-        print(useful_metadata)
+        #print(useful_metadata)
                 
         weights_sum = 0
         values_sum = 0
         for station in useful_metadata.index:
-            if pd.notnull(nearby_data.loc[date,station]):
-                weights_sum = weights_sum + useful_metadata.loc[station,'weight']
-                values_sum = values_sum + nearby_data.loc[date,station]*useful_metadata.loc[station,'weight']
+            #if pd.notnull(nearby_data.loc[date,station]):
+            weights_sum = weights_sum + useful_metadata.loc[station,'weight']
+            values_sum = values_sum + nearby_data.loc[date,station]*useful_metadata.loc[station,'weight']
 
         if weights_sum is not 0: # avoid dividing by zero--if no data for any of them, keep it as NaN
             data[date] = values_sum/weights_sum
@@ -731,6 +732,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
     else:
         closest_obj = None
     
+    stations = stations.ix[0:min(8,len(stations)),:]
     # metadata for stations used in the spatial interpolation
     stations = create_station_weights(stations)    
     print('Stations, with weights, used in the spatial interpolation:')

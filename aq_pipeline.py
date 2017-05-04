@@ -16,10 +16,10 @@ import numpy as np
 ### ---- USER INPUTS ---- ###
 
 start_date = '2012-01-01'
-end_date = '2013-12-31'
+end_date = '2015-12-31'
 
-latlon = (41.80118,-87.832349)
-r_max_interp = 250 # how far from latlon of interest should it look for stations?
+latlon = (38.804267,-123.018142)
+r_max_interp = 150 # how far from latlon of interest should it look for stations?
 r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
 ### ---- END USER INPUTS ---- ###
@@ -30,8 +30,8 @@ all_data = aq.extract_raw_data(start_date,end_date,param_code=81102)
 
 pm25_data = aq.extract_raw_data(start_date,end_date,param_code=88101)
 #ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
-#CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
-other_data = pd.concat([pm25_data])
+CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
+other_data = pd.concat([pm25_data,CO_data])
 #other_data = pd.concat([pm25_data])
 other_data = other_data.set_index(pd.Series(data=range(len(other_data)))) # reindex to get rid of duplicate indices (index here is not significant)
 
