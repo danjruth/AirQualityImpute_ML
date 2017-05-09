@@ -24,6 +24,9 @@ def matshow_dates(df,ax):
     ax.set_yticks([x+0.5 for x in range(0,len(df.columns.values))])
     ax.xaxis.tick_bottom()
     ax.xaxis_date()
+    plt.show()
+    plt.pause(0.01)
+    plt.show()
     return ax
 
 # plot a matrix of nearby station values, labeling each station
@@ -95,10 +98,10 @@ class aq_station:
             print('   Removing stations with latitude '+str(self.ignoring[0]))
             self.other_stations = self.other_stations[self.other_stations['Latitude']!=self.ignoring[0]].copy()
         self.other_data_df = extract_nearby_values(self.other_stations,other_data,self.start_date,self.end_date)
-        other_yesterday = self.other_data_df.copy()
-        other_yesterday.index = other_yesterday.index + pd.Timedelta('1D')
-        other_yesterday = other_yesterday.reindex(index=self.other_data_df.index)
-        other_yesterday.columns = [x+'_y' for x in other_yesterday.columns]
+        #other_yesterday = self.other_data_df.copy()
+        #other_yesterday.index = other_yesterday.index + pd.Timedelta('1D')
+        #other_yesterday = other_yesterday.reindex(index=self.other_data_df.index)
+        #other_yesterday.columns = [x+'_y' for x in other_yesterday.columns]
         #self.other_data_df = pd.concat([self.other_data_df,other_yesterday],axis=1)
         
     def plot_matrix_station(self):
@@ -129,7 +132,7 @@ class aq_station:
     def create_model(self):
         
         # determine which features should be used for this model
-        self.gs,self.bs = feature_selection(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
+        self.gs,self.bs = feature_selection_rfe(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
             
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
@@ -301,6 +304,19 @@ def feature_selection(df,this_station,stations_to_keep=None):
     missing_days = this_station.index[pd.isnull(this_station)]
     known_days = this_station.index[pd.notnull(this_station)]
     print('There are '+str(len(missing_days))+' missing days out of '+str(len(this_station))+' total days for this station.')
+    
+    corr_vals = pd.Series(index=df.columns)
+    for station in corr_vals.index:
+        corr_vals[station] = df[station].corr(this_station)
+    corr_vals = corr_vals.sort_values(ascending=False)
+    df = df[corr_vals.index]
+    
+    # df is now sorted by the correlation to the values (before missing values are filled in)
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    matshow_dates(df,ax)
+    ax.set_title('Stations considered for a model for '+str(this_station.name))
                                       
     if len(missing_days)==0:
         missing_days = this_station.index
@@ -329,9 +345,7 @@ def feature_selection(df,this_station,stations_to_keep=None):
         if enough_data:
             good_stations = pd.concat([good_stations,col_vals],axis=1)
         else:
-            bad_stations = pd.concat([bad_stations,col_vals],axis=1)
-    
-    print(str(len(good_stations.columns))+' good stations, '+str(len(bad_stations.columns))+' bad stations.')
+            bad_stations = pd.concat([bad_stations,col_vals],axis=1)    
     
     # choose how many stations to keep based on how many samples there will be to train on
     if stations_to_keep is None:
@@ -342,11 +356,41 @@ def feature_selection(df,this_station,stations_to_keep=None):
         corr_vals[station] = good_stations[station].corr(this_station)
     corr_vals = corr_vals.sort_values(ascending=False)
     corr_vals = corr_vals[corr_vals>0.25]
+    
     cols_to_keep = corr_vals.index.tolist()[0:min(stations_to_keep,len(corr_vals))]
     good_stations_filtered = good_stations.loc[:,cols_to_keep]
     #good_stations_filtered['date'] = 
+    
+    print(str(len(good_stations_filtered.columns))+' good stations.')
         
     return good_stations_filtered, bad_stations
+    
+def feature_selection_rfe(df,this_station,stations_to_keep=None):
+    
+    from sklearn.feature_selection import RFE
+    from sklearn.linear_model import LinearRegression
+    
+    # look at each column (data for a given station) and see if it's good or bad
+    for column in df:
+        
+        col_vals = df[column]
+        
+        # now that the portion missing is calculated, fill in the missing values
+        col_vals.loc[pd.isnull(col_vals)] = col_vals[pd.notnull(col_vals)].mean()
+        
+        df[column] = col_vals
+        
+    model = LinearRegression()
+    rfe = RFE(model,5)
+    fit = rfe.fit(df.values,this_station.data)
+    print(fit)
+    
+    feature_is_used = fit.support_
+    print(feature_is_used)
+    cols_to_keep = df.columns[feature_is_used==True]
+    good_stations_filtered = df.loc[:,cols_to_keep]
+    
+    return good_stations_filtered, None
     
 # fill in missing predictor values, keeping it as a df
 def fill_missing_predictors(predictors):    
@@ -785,7 +829,9 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         print('Recalculating weights for each day...')
         data = spatial_interp_variable_weights(composite_data,stations)
     else:
-        print('No NaNs found, so using constant weights...')
+        print('No NaNs found, so using constant weights with...')
+        print(composite_data.columns)
+        print(stations.index)
         data = spatial_interp(composite_data,stations)   
         
     # plot the predicted, original, and composite data
