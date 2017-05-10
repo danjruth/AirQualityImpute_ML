@@ -28,6 +28,73 @@ def matshow_dates(df,ax):
     plt.pause(0.01)
     plt.show()
     return ax
+    
+def nn_viz(model):
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    
+    print(dir(model))
+    
+    print(model.coefs_)
+    print(model.coefs_[0])
+    print(model.coefs_[0][0])
+    print(model.coefs_[0][0][0])
+    print(model.coefs_[1])
+    
+    print(model.coefs_[2])
+    
+    
+    
+    layervals = list()
+    for n1 in range(len(model.coefs_[0])):
+        for n2 in range(len(model.coefs_[0][0])):
+            layervals.append(model.coefs_[0][n1][n2])
+    abslv = [abs(x) for x in layervals]
+    for n1 in range(len(model.coefs_[0])):
+        for n2 in range(len(model.coefs_[0][0])):
+            g = max(0,model.coefs_[0][n1][n2]/max(layervals))
+            r = (model.coefs_[0][n1][n2]<1) * max(0,model.coefs_[0][n1][n2]/min(layervals))
+    
+            ax.plot([0,1],[float(n1)/(len(model.coefs_[0])-1),float(n2)/(len(model.coefs_[0][0])-1)],lw=abs(model.coefs_[0][n1][n2])/max(abslv)*5,color=(r,g,0))
+    
+    layervals = list()    
+    for n2 in range(len(model.coefs_[0][0])):
+        for n3 in range(len(model.coefs_[1][0])):
+            layervals.append(model.coefs_[1][n2][n3])        
+    abslv = [abs(x) for x in layervals]
+    for n2 in range(len(model.coefs_[0][0])):
+        for n3 in range(len(model.coefs_[1][0])):
+            g = max(0,model.coefs_[1][n2][n3]/max(layervals))
+            r = (model.coefs_[1][n2][n3]<1) * max(0,model.coefs_[1][n2][n3]/min(layervals))
+            ax.plot([1,2],[float(n2)/(len(model.coefs_[0][0])-1),float(n3)/(len(model.coefs_[1][0])-1)],lw=abs(model.coefs_[1][n2][n3])/max(abslv)*5,color=(r,g,0))
+      
+    layervals = list()    
+    for n3 in range(len(model.coefs_[1][0])):
+        layervals.append(model.coefs_[2][n3])        
+    abslv = [abs(x) for x in layervals]
+    for n3 in range(len(model.coefs_[1][0])):
+        g = max(0,model.coefs_[2][n3]/max(layervals))
+        r = (model.coefs_[2][n3]<1) * max(0,model.coefs_[2][n3]/min(layervals))
+        ax.plot([2,3],[float(n3)/(len(model.coefs_[1][0])-1),0.5],lw=abs(model.coefs_[2][n3])/max(abslv)*5,color=(r,g,0))
+        
+        
+    for n in range(len(model.coefs_[0])):
+        ax.plot(0,float(n)/(len(model.coefs_[0])-1),'o',color='k')
+    plt.show()
+    
+    for n in range(len(model.coefs_[0][0])):
+        ax.plot(1,float(n)/(len(model.coefs_[0][0])-1),'o',color='k')
+    plt.show()
+    
+    for n in range(len(model.coefs_[1][0])):
+        ax.plot(2,float(n)/(len(model.coefs_[1][0])-1),'o',color='k')
+    plt.show()
+    
+    ax.plot(3,0.5,'o',color='k')
+        
+    # plot the inputs
+    #for x in 
 
 # plot a matrix of nearby station values, labeling each station
 '''
@@ -132,13 +199,9 @@ class aq_station:
     def create_model(self):
         
         # determine which features should be used for this model
-<<<<<<< HEAD
-        self.gs,self.bs = feature_selection(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
-=======
         days = pd.Series(index=self.nearby_data_df.index,data=(self.nearby_data_df.index-self.nearby_data_df.index[0])/pd.Timedelta('1D'))
         days = days.rename('days')
         self.gs,self.bs = feature_selection_rfe(pd.concat([days,self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
->>>>>>> origin/master
             
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
@@ -159,8 +222,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    #folder = 'C:\Users\druth\Documents\epa_data\\'
+    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -406,9 +469,10 @@ def feature_selection_rfe(df,this_station,stations_to_keep=None):
         num_missing_while_known = len(col_while_known[pd.isnull(col_while_known)==True]) # missing days from (column when this_station is missing)
         portion_missing_while_known = float(num_missing_while_known)/float(len(known_days))
         
-        consider_col = (portion_missing_while_missing < 2 * portion_missing_while_known)
+        consider_col = portion_missing_while_missing < (2*portion_missing_while_known)
         
-        if consider_col:
+        if consider_col==True:
+            print([portion_missing_while_missing,portion_missing_while_known])
             cols_to_consider.append(column)
         
         df[column] = col_vals
@@ -419,19 +483,20 @@ def feature_selection_rfe(df,this_station,stations_to_keep=None):
     if stations_to_keep is None:
         stations_to_keep = min(15,max(1,int(len(known_y)/20)))
     
+        
+    
     model = DecisionTreeRegressor(max_depth=5)
     rfe = RFE(model,8)
     fit = rfe.fit(known_x,known_y)
     #print(fit)
     
     feature_is_used = fit.support_
-    print(feature_is_used)
-    print(cols_to_consider)
     cols_to_keep = list()
     for ix in range(len(cols_to_consider)):
-        if feature_is_used[ix] is True:
-            cols_to_keep = cols_to_keep.append(cols_to_consider[ix])
+        if feature_is_used[ix] == True:
+            cols_to_keep.append(cols_to_consider[ix])
     #cols_to_keep = cols_to_consider[feature_is_used==True]
+    cols_to_keep.append('days')
     print(cols_to_keep)
     good_stations_filtered = df.loc[:,cols_to_keep]
     
@@ -510,14 +575,15 @@ def create_model_for_site(predictors,site):
     lin_model_train_predicted = lin_model.predict(known_x.iloc[train_indx])
     r2_lin_train = r2_score(known_y[train_indx],lin_model_train_predicted)
 
-    '''
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl_size = (max(2,int(num_known/100))) # should probably depend on training data shape
+    hl1_size = min(max(2,int(num_known/100)),len(predictors.columns)-1)
+    hl_size = (hl1_size,min(4,max(2,hl1_size/2))) # should probably depend on training data shape
+    #hl_size = (hl1_size,1) # should probably depend on training data shape
     print(str(hl_size)+' hidden layer nodes.')
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
-    '''
+    
     
     '''
     # SVM
@@ -525,14 +591,16 @@ def create_model_for_site(predictors,site):
     model = sklearn.svm.SVR()
     '''
     
-    
+    '''
     # regression tree
     import sklearn.tree
     model = sklearn.tree.DecisionTreeRegressor(max_depth=5)
+    '''
         
 
     # fit the model with the training data
     model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
+    nn_viz(model)
     model_predicted = model.predict(known_x.iloc[test_indx])
     r2_ML_test = r2_score(known_y[test_indx],model_predicted)
     model_train_predicted = model.predict(known_x.iloc[train_indx])
@@ -545,6 +613,7 @@ def create_model_for_site(predictors,site):
         
     if r2_ML_test > r2_lin_test:
         model = model
+        
     else:
         print('Using the linear model.')
         model = lin_model
@@ -814,6 +883,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         print('Stations, before weights are computed:')
         print(stations)
         
+        '''
         # try predicting the values without filling in missing ones with ML
         print('Predicting the values at this station without imputation...')
         print(closest_obj.nearby_data_df)
@@ -823,6 +893,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         plt.plot(target_data,label='target')
         plt.legend()
         plt.show()
+        '''
     else:
         closest_obj = None
     
