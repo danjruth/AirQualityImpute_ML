@@ -132,7 +132,7 @@ class aq_station:
     def create_model(self):
         
         # determine which features should be used for this model
-        self.gs,self.bs = feature_selection_rfe(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
+        self.gs,self.bs = feature_selection(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
             
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
