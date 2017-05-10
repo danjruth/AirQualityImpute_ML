@@ -132,7 +132,9 @@ class aq_station:
     def create_model(self):
         
         # determine which features should be used for this model
-        self.gs,self.bs = feature_selection_rfe(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
+        days = pd.Series(index=self.nearby_data_df.index,data=(self.nearby_data_df.index-self.nearby_data_df.index[0])/pd.Timedelta('1D'))
+        days = days.rename('days')
+        self.gs,self.bs = feature_selection_rfe(pd.concat([days,self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
             
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
@@ -153,8 +155,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    folder = 'C:\Users\druth\Documents\epa_data\\'
+    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -367,27 +369,66 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
 def feature_selection_rfe(df,this_station,stations_to_keep=None):
     
+    missing_days = this_station.index[pd.isnull(this_station)]
+    known_days = this_station.index[pd.notnull(this_station)]
+    print('There are '+str(len(missing_days))+' missing days out of '+str(len(this_station))+' total days for this station.')
+    
     from sklearn.feature_selection import RFE
-    from sklearn.linear_model import LinearRegression
+    #from sklearn.linear_model import LinearRegression
+    from sklearn.tree import DecisionTreeRegressor
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    matshow_dates(df,ax)
+    ax.set_title('Stations considered for a model for '+str(this_station.name))
+    
+    cols_to_consider = list()
     
     # look at each column (data for a given station) and see if it's good or bad
     for column in df:
         
         col_vals = df[column]
         
+        col_while_missing = col_vals[missing_days] # column while this_station is missing values
+        col_while_known = col_vals[known_days]
+        
         # now that the portion missing is calculated, fill in the missing values
         col_vals.loc[pd.isnull(col_vals)] = col_vals[pd.notnull(col_vals)].mean()
         
-        df[column] = col_vals
+        # identify the portion of values missing from this predictor station (col) while
+        # we also are/are not missing values from the station to predict (this_station).
+        num_missing_while_missing = len(col_while_missing[pd.isnull(col_while_missing)==True]) # missing days from (column when this_station is missing)
+        portion_missing_while_missing = float(num_missing_while_missing)/float(len(missing_days))
+        num_missing_while_known = len(col_while_known[pd.isnull(col_while_known)==True]) # missing days from (column when this_station is missing)
+        portion_missing_while_known = float(num_missing_while_known)/float(len(known_days))
         
-    model = LinearRegression()
-    rfe = RFE(model,5)
-    fit = rfe.fit(df.values,this_station.data)
-    print(fit)
+        consider_col = (portion_missing_while_missing < 2 * portion_missing_while_known)
+        
+        if consider_col:
+            cols_to_consider.append(column)
+        
+        df[column] = col_vals
+
+    known_x,known_y,unknown_x = split_known_unknown_rows(df[cols_to_consider],this_station)
+    
+    # choose how many stations to keep based on how many samples there will be to train on
+    if stations_to_keep is None:
+        stations_to_keep = min(15,max(1,int(len(known_y)/20)))
+    
+    model = DecisionTreeRegressor(max_depth=5)
+    rfe = RFE(model,8)
+    fit = rfe.fit(known_x,known_y)
+    #print(fit)
     
     feature_is_used = fit.support_
     print(feature_is_used)
-    cols_to_keep = df.columns[feature_is_used==True]
+    print(cols_to_consider)
+    cols_to_keep = list()
+    for ix in range(len(cols_to_consider)):
+        if feature_is_used[ix] is True:
+            cols_to_keep = cols_to_keep.append(cols_to_consider[ix])
+    #cols_to_keep = cols_to_consider[feature_is_used==True]
+    print(cols_to_keep)
     good_stations_filtered = df.loc[:,cols_to_keep]
     
     return good_stations_filtered, None
@@ -465,12 +506,14 @@ def create_model_for_site(predictors,site):
     lin_model_train_predicted = lin_model.predict(known_x.iloc[train_indx])
     r2_lin_train = r2_score(known_y[train_indx],lin_model_train_predicted)
 
+    '''
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
     hl_size = (max(2,int(num_known/100))) # should probably depend on training data shape
     print(str(hl_size)+' hidden layer nodes.')
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
+    '''
     
     '''
     # SVM
@@ -478,11 +521,11 @@ def create_model_for_site(predictors,site):
     model = sklearn.svm.SVR()
     '''
     
-    '''
+    
     # regression tree
     import sklearn.tree
-    model = sklearn.tree.DecisionTreeRegressor(max_depth=3)
-    '''    
+    model = sklearn.tree.DecisionTreeRegressor(max_depth=5)
+        
 
     # fit the model with the training data
     model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
@@ -545,6 +588,9 @@ def fill_with_model(predictors,site,model):
     
     # split known/unknown, simulate
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)    
+    
+    if len(unknown_x)==0:
+        return known_y
     predicted_y = model.predict(unknown_x)
     
     
