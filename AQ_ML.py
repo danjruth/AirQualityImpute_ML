@@ -28,8 +28,36 @@ def matshow_dates(df,ax):
     plt.pause(0.01)
     plt.show()
     return ax
+
+
+def nn_viz_map(model,locs):
     
-def nn_viz(model):
+    from mpl_toolkits.basemap import Basemap
+    '''
+    Visualize the neural net like with nn_viz, but the input layer nodes are
+    plotted on a Basemap at the corresponding locations.
+    
+    '''
+    
+    fig = plt.figure(figsize=(12,5))
+    ax_map = fig.add_subplot(1,2,1)
+    ax_nodes = fig.add_subplot(1,2,2)
+    
+    # set viewing window for map plot
+    scale_factor = 100.0 # lat/lon coords to show from center point per km of r_max
+    left_lim = latlon[1]-1.2*r_max/scale_factor
+    right_lim = latlon[1]+1.2*r_max/scale_factor
+    bottom_lim = latlon[0]-r_max/scale_factor
+    top_lim = latlon[0]+r_max/scale_factor
+    
+    m = Basemap(projection='merc',resolution='i',lat_0=latlon[0],lon_0=latlon[1],llcrnrlon=left_lim,llcrnrlat=bottom_lim,urcrnrlon=right_lim,urcrnrlat=top_lim,ax=ax_map)
+    m.shadedrelief()
+    m.drawstates()
+    m.drawcountries()
+    m.drawrivers()
+    m.drawcoastlines()
+    
+def nn_viz(model,predictor_names):
     
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -92,6 +120,9 @@ def nn_viz(model):
     plt.show()
     
     ax.plot(3,0.5,'o',color='k')
+    
+    ax.set_yticks(np.linspace(0,1,len(predictor_names)))
+    ax.set_yticklabels(predictor_names)
         
     # plot the inputs
     #for x in 
@@ -218,12 +249,12 @@ class aq_station:
         self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
         
         # plot the features and the value to predict
-        self.plot_matrix_station()
+        #self.plot_matrix_station()
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    folder = 'C:\Users\druth\Documents\epa_data\\'
+    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -382,10 +413,12 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
     # df is now sorted by the correlation to the values (before missing values are filled in)
     
+    '''
     fig = plt.figure()
     ax = fig.add_subplot(111)
     matshow_dates(df,ax)
     ax.set_title('Stations considered for a model for '+str(this_station.name))
+    '''
                                       
     if len(missing_days)==0:
         missing_days = this_station.index
@@ -444,10 +477,12 @@ def feature_selection_rfe(df,this_station,stations_to_keep=None):
     #from sklearn.linear_model import LinearRegression
     from sklearn.tree import DecisionTreeRegressor
     
+    '''
     fig = plt.figure()
     ax = fig.add_subplot(111)
     matshow_dates(df,ax)
     ax.set_title('Stations considered for a model for '+str(this_station.name))
+    '''
     
     cols_to_consider = list()
     
@@ -472,7 +507,7 @@ def feature_selection_rfe(df,this_station,stations_to_keep=None):
         consider_col = portion_missing_while_missing < (2*portion_missing_while_known)
         
         if consider_col==True:
-            print([portion_missing_while_missing,portion_missing_while_known])
+            #print([portion_missing_while_missing,portion_missing_while_known])
             cols_to_consider.append(column)
         
         df[column] = col_vals
@@ -496,7 +531,7 @@ def feature_selection_rfe(df,this_station,stations_to_keep=None):
         if feature_is_used[ix] == True:
             cols_to_keep.append(cols_to_consider[ix])
     #cols_to_keep = cols_to_consider[feature_is_used==True]
-    cols_to_keep.append('days')
+    #cols_to_keep.append('days')
     print(cols_to_keep)
     good_stations_filtered = df.loc[:,cols_to_keep]
     
@@ -540,11 +575,9 @@ def split_known_unknown_rows(predictors,site):
 # given training data, create a model that'll be used to predict the missing data
 def create_model_for_site(predictors,site):
     
-    from sklearn.metrics import r2_score
+    from sklearn.metrics import r2_score    
     
-    
-    print('Creating a model for '+str(site.name))
-    
+    print('Creating a model for '+str(site.name))    
     
     # split into known/unknown datapoints
     known_x,known_y,unknown_x = split_known_unknown_rows(predictors,site)
@@ -578,7 +611,7 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl1_size = min(max(2,int(num_known/100)),len(predictors.columns)-1)
+    hl1_size = min(max(2,int(num_known/120)),len(predictors.columns)-2)
     hl_size = (hl1_size,min(4,max(2,hl1_size/2))) # should probably depend on training data shape
     #hl_size = (hl1_size,1) # should probably depend on training data shape
     print(str(hl_size)+' hidden layer nodes.')
@@ -600,7 +633,7 @@ def create_model_for_site(predictors,site):
 
     # fit the model with the training data
     model.fit(known_x.iloc[train_indx,:], known_y[train_indx])
-    nn_viz(model)
+    #nn_viz(model,predictors.columns)
     model_predicted = model.predict(known_x.iloc[test_indx])
     r2_ML_test = r2_score(known_y[test_indx],model_predicted)
     model_train_predicted = model.predict(known_x.iloc[train_indx])
@@ -622,6 +655,7 @@ def create_model_for_site(predictors,site):
     #model_known_predicted = model.predict(known_x.iloc[train_indx])
     #r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
     
+    '''
     # target vs predicted
     fig=plt.figure(figsize=(12,6))
     
@@ -646,6 +680,7 @@ def create_model_for_site(predictors,site):
     #plt.title(str(r2_ML_test)+', '+str(r2_ML_train))
     plt.pause(.1)
     plt.show()
+    '''
     
     #print(str(r2_lin)+', '+str(r2_predicted)+', '+str(r2_known_predicted))
     print('Linear: '+str(r2_lin_test)+' , '+str(r2_lin_train))
@@ -883,7 +918,6 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         print('Stations, before weights are computed:')
         print(stations)
         
-        '''
         # try predicting the values without filling in missing ones with ML
         print('Predicting the values at this station without imputation...')
         print(closest_obj.nearby_data_df)
@@ -893,7 +927,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         plt.plot(target_data,label='target')
         plt.legend()
         plt.show()
-        '''
+        
     else:
         closest_obj = None
     

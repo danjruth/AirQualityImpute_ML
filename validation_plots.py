@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+'''
 import pickle
 file = open('C:\Users\druth\Documents\\validation_results.obj','rb')
 object_file = pickle.load(file)
@@ -17,6 +18,13 @@ file.close()
 
 results = object_file[0].drop('Comments',1).dropna(axis=0,how='any')
 results = results.set_index(np.arange(len(results)))
+'''
+
+results = pd.read_csv('validation_170515_11-15.csv')
+
+#results = results.drop(results.columns[2],1).dropna(axis=0,how='any')
+results = results.set_index(np.arange(len(results)))
+
 
 fig = plt.figure(figsize=(9,8))
 ax_r2 = fig.add_subplot(321)
@@ -69,7 +77,7 @@ ax_mae.set_xlabel('Test location')
 ax_mae.tick_params(axis='x',which='minor',bottom='on')
 ax_mae_roll.set_xlabel('Test location')
 
-fig.savefig('C:\Users\druth\Documents\SULI\Paper\Figures\\aq_validation_bar.pdf')
+#fig.savefig('C:\Users\druth\Documents\SULI\Paper\Figures\\aq_validation_bar.pdf')
 
 
 
@@ -96,11 +104,13 @@ for ix in results.index:
     plt.plot(x,y,'x',color='r')
     labellist[ix]=plt.text(x,y,'  '+str(ix)+'  ',horizontalalignment='left',size='large',color='k')
     
+'''
 labellist[8].set_horizontalalignment('right')
 labellist[9].set_horizontalalignment('right')
 labellist[9].set_verticalalignment('bottom')
 #labellist[11].set_verticalalignment('bottom')
 labellist[11].set_text('')
 labellist[1].set_text('  1, 11  ')
+'''
 plt.show()
-fig_map.savefig('C:\Users\druth\Documents\SULI\Paper\Figures\\aq_validation_map.png')
+#fig_map.savefig('C:\Users\druth\Documents\SULI\Paper\Figures\\aq_validation_map.png')
