@@ -18,7 +18,7 @@ import numpy as np
 start_date = '2011-01-01'
 end_date = '2015-12-31'
 
-latlon = (34.843895,-82.414585)
+latlon = (39,	-122)
 r_max_interp = 200 # how far from latlon of interest should it look for stations?
 r_max_ML = 200 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
@@ -41,10 +41,31 @@ all_data = aq.identify_nearby_stations(latlon,r_max_interp+r_max_ML,all_data,sta
 other_data = aq.identify_nearby_stations(latlon,r_max_interp+r_max_ML,other_data,start_date,end_date,ignore_closest=False)
 all_data = all_data.sort_values('Date Local')
 other_data = other_data.sort_values('Date Local')
-#all_data = aq.addon_stationid(all_data)
-#other_data = aq.addon_stationid(other_data)
 
 # run the algorithm
+
+start_date = '2013-01-01'
+end_date = '2014-12-31'
+
+composite_data, orig, stations, station_obj_list = aq.create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data.copy(),other_data.copy(),ignore_closest=False)
+data = aq.predict_aq_vals(composite_data,stations)
+
+nearby_stations = aq.identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date,ignore_closest=False)
+nearby_stations = aq.addon_stationid(nearby_stations)
+nearby_stations = aq.remove_dup_stations(nearby_stations,ignore_closest=False)    
+nearby_data = aq.extract_nearby_values(nearby_stations,all_data.copy(),start_date,end_date)
+data_no_ML = aq.spatial_interp_variable_weights(nearby_data,nearby_stations,max_stations=10)
+
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.plot(data_no_ML,color='gray',lw=1)
+ax.plot(data,color='b',lw=2)
+plt.show()
+
+#aq.final_big_plot(data,orig,composite_data,stations) 
+
+'''
 data, target_data, results_noML, station_obj_list, composite_data, orig, all_stations = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)
 
 # construct dataframe to facilitate comparison between methods
@@ -136,3 +157,4 @@ plt.legend()
 plt.ylabel('Predicted')
 plt.xlabel('Target')
 plt.show()
+'''

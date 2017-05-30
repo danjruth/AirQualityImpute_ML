@@ -30,49 +30,178 @@ def matshow_dates(df,ax):
     return ax
 
 
-def nn_viz_map(model,locs):
+def nn_viz_map(station,ax=None):
+    '''
+    Visualize a neural network with the nodes plotted over a Basemap.    
+    '''
     
     from mpl_toolkits.basemap import Basemap
-    '''
-    Visualize the neural net like with nn_viz, but the input layer nodes are
-    plotted on a Basemap at the corresponding locations.
+    from mpl_toolkits.mplot3d import Axes3D
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    
+    if ax is None:
+        fig = plt.figure(figsize=(10,7))
+        ax = Axes3D(fig)
+    
+    all_nearby_stations = pd.concat([station.nearby_stations,station.other_stations])    
     
     '''
+    Set up the extent of the basemap
+    '''
     
-    fig = plt.figure(figsize=(12,5))
-    ax_map = fig.add_subplot(1,2,1)
-    ax_nodes = fig.add_subplot(1,2,2)
+    left_lim = all_nearby_stations['Longitude'].min()
+    right_lim = all_nearby_stations['Longitude'].max()
+    bottom_lim = all_nearby_stations['Latitude'].min()
+    top_lim = all_nearby_stations['Latitude'].max()
     
-    # set viewing window for map plot
-    scale_factor = 100.0 # lat/lon coords to show from center point per km of r_max
-    left_lim = latlon[1]-1.2*r_max/scale_factor
-    right_lim = latlon[1]+1.2*r_max/scale_factor
-    bottom_lim = latlon[0]-r_max/scale_factor
-    top_lim = latlon[0]+r_max/scale_factor
+    dlon = right_lim - left_lim
+    dlat = top_lim - bottom_lim
     
-    m = Basemap(projection='merc',resolution='i',lat_0=latlon[0],lon_0=latlon[1],llcrnrlon=left_lim,llcrnrlat=bottom_lim,urcrnrlon=right_lim,urcrnrlat=top_lim,ax=ax_map)
-    m.shadedrelief()
-    m.drawstates()
-    m.drawcountries()
-    m.drawrivers()
-    m.drawcoastlines()
+    left_lim = left_lim - dlon*0.1
+    right_lim = right_lim + dlon*0.1
+    bottom_lim = bottom_lim - dlat*0.1
+    top_lim = top_lim + dlat*0.1
+    
+    # create a Basemap and add relevant features to the lowest plane of the figure
+    m = Basemap(projection='cyl',llcrnrlon=left_lim,llcrnrlat=bottom_lim,urcrnrlon=right_lim,urcrnrlat=top_lim,ax=ax,fix_aspect=True,resolution='h')
+    
+    ax.add_collection3d(m.drawcoastlines(linewidth=0.5))
+    ax.add_collection3d(m.drawcountries(linewidth=0.5))
+    ax.add_collection3d(m.drawstates(linewidth=.35))
+    ax.add_collection3d(m.drawrivers(linewidth=0.35))
+    #ax.add_collection3d(m.drawcounties(linewidth=0.2))
+    ax.set_axis_off()
+    
+    plt.show()
+    
+    '''
+    Plot the three planes. The physical location of the stations will go on the
+    bottom; the hidden layer nodes will go on the middle; the output will go on 
+    the top.
+    '''
+    
+    (mlons,mlats) = m([left_lim,right_lim],[bottom_lim,top_lim])
+    
+    alpha= 0.2
+    
+    # plot the middle plane
+    x = [mlons[0],mlons[0],mlons[1],mlons[1]]
+    y = [mlats[0],mlats[1],mlats[1],mlats[0]]
+    z = [1,1,1,1]
+    verts = [zip(x,y,z)]
+    ax.add_collection3d(Poly3DCollection(verts,color=(0,0,1,alpha)))
+    plt.show()
+    
+    # plot the top plane
+    x = [mlons[0],mlons[0],mlons[1],mlons[1]]
+    y = [mlats[0],mlats[1],mlats[1],mlats[0]]
+    z = [2,2,2,2]
+    verts = [zip(x,y,z)]
+    ax.add_collection3d(Poly3DCollection(verts,color=(1,0,0,alpha)))
+    plt.show()
+    
+    # plot the bottom plane
+    x = [mlons[0],mlons[0],mlons[1],mlons[1]]
+    y = [mlats[0],mlats[1],mlats[1],mlats[0]]
+    z = [0,0,0,0]
+    verts = [zip(x,y,z)]
+    ax.add_collection3d(Poly3DCollection(verts,alpha=0.2,color=(0,1,0,alpha)))
+    plt.show()
+    
+    # plot the back planes
+    x = [mlons[0],mlons[0],mlons[1],mlons[1]]
+    y = [mlats[1],mlats[1],mlats[1],mlats[1]]
+    z = [0,2,2,0]
+    verts = [zip(x,y,z)]
+    ax.add_collection3d(Poly3DCollection(verts,alpha=0.2,color=(.5,.5,.5,alpha)))
+    plt.show()
+    x = [mlons[0],mlons[0],mlons[0],mlons[0]]
+    y = [mlats[0],mlats[0],mlats[1],mlats[1]]
+    z = [0,2,2,0]
+    verts = [zip(x,y,z)]
+    ax.add_collection3d(Poly3DCollection(verts,alpha=0.2,color=(.5,.5,.5,alpha)))
+    plt.show()
+    
+    '''
+    Plot the nodes on their respective planes. For nodes not in the input
+    layer, the location is determined by the weighted average of the nodes
+    feeeding into it.
+    '''
+    
+    hl_size = station.model.hidden_layer_sizes
+    nearby_stations = [n for n in station.gs.columns if n in all_nearby_stations.index]
+    
+    # plot the input layer
+    weights_sum_dict = {}
+    neuron_loc_dict = {}
+    for hl_num in range(hl_size):
+        weighted_x = 0
+        weighted_y = 0
+        weights_sum = 0
+        for ix,nearby_station_indx in enumerate(nearby_stations):
+            nearby_station = all_nearby_stations.loc[nearby_station_indx]
+            (x,y) = m([nearby_station['Longitude']],[nearby_station['Latitude']])
+            x = x[0]
+            y = y[0]
+            
+            weight = abs(station.model.coefs_[0][ix,hl_num])
+            
+            weighted_x = weighted_x + x*weight
+            weighted_y = weighted_y + y*weight
+            weights_sum= weights_sum + weight
+            
+        x = weighted_x / weights_sum
+        y = weighted_y / weights_sum
+        weights_sum_dict[hl_num] = weights_sum
+        neuron_loc_dict[hl_num] = (x,y)
+        ax.plot([x],[y],'o',color='b',lw=1,zs=1)            
+        
+    for nearby_station_indx in nearby_stations:
+        
+        nearby_station = all_nearby_stations.loc[nearby_station_indx]
+        (x,y) = m([nearby_station['Longitude']],[nearby_station['Latitude']])
+        ax.plot(x,y,'o',color='g',lw=1,zs=0)
+        
+        for hl_num in range(hl_size):
+            weight = abs(station.model.coefs_[0][ix,hl_num])            
+            ax.plot([x[0],neuron_loc_dict[hl_num][0]],[y[0],neuron_loc_dict[hl_num][1]],zs=[0,1],color='k',lw=float(weight/weights_sum_dict[hl_num])*3)
+      
+    weighted_x = 0
+    weighted_y = 0
+    weights_sum = 0      
+    
+    for hl1_num in range(hl_size):
+        
+        (x,y) = neuron_loc_dict[hl1_num]
+        weight = abs(station.model.coefs_[1][hl1_num])
+        
+        weighted_x = weighted_x + x*weight
+        weighted_y = weighted_y + y*weight
+        weights_sum= weights_sum + weight
+        
+    final_x = weighted_x / weights_sum
+    final_y = weighted_y / weights_sum
+    ax.plot([final_x],[final_y],'o',color='r',lw=1,zs=2)
+    
+    for hl1_num in range(hl_size):
+        weight = abs(station.model.coefs_[1][hl1_num])
+            
+        (x,y) = neuron_loc_dict[hl1_num]
+        ax.plot([final_x[0],neuron_loc_dict[hl1_num][0]],[final_y[0],neuron_loc_dict[hl1_num][1]],zs=[2,1],color='k',lw=float(weight/weights_sum)*3)
+            
+    # column for the "output" station
+    (x_target,y_target) = m([station.latlon[1]],[station.latlon[0]])
+    
+    ax.plot([x_target[0],final_x[0]],[y_target[0],final_y[0]],zs=[0,2],color='k')
+    ax.plot([x_target[0]],[y_target[0]],'x',zs=[0],color='g')
+    
+    
+    plt.show()
     
 def nn_viz(model,predictor_names):
     
     fig = plt.figure()
-    ax = fig.add_subplot(111)
-    
-    print(dir(model))
-    
-    print(model.coefs_)
-    print(model.coefs_[0])
-    print(model.coefs_[0][0])
-    print(model.coefs_[0][0][0])
-    print(model.coefs_[1])
-    
-    print(model.coefs_[2])
-    
-    
+    ax = fig.add_subplot(111)    
     
     layervals = list()
     for n1 in range(len(model.coefs_[0])):
@@ -168,44 +297,39 @@ class aq_station:
         print('----------------------')
         print('Getting station data for station '+self.station_id)
         
+        start = df['Date Local'].min()
+        end = df['Date Local'].max()
+        
         # get data of interest
-        self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df,self.start_date,self.end_date)
+        self.nearby_stations = identify_nearby_stations(self.latlon,r_max,df,start,end)
         self.nearby_stations = addon_stationid(self.nearby_stations)
         self.nearby_stations = remove_dup_stations(self.nearby_stations,ignore_closest=False)
         if self.ignoring is not None:
             print('   Removing stations with latitude '+str(self.ignoring[0]))
-            self.nearby_stations = self.nearby_stations[self.nearby_stations['Latitude']!=self.ignoring[0]].copy()
-        self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,self.start_date,self.end_date)
+            self.nearby_stations = self.nearby_stations[self.nearby_stations['Latitude']!=self.ignoring[0]].copy()        
+        self.nearby_data_df = extract_nearby_values(self.nearby_stations,df,start,end)
+        
+        # separate this station's data from the "nearby" dataframe
         if self.station_id in self.nearby_data_df.columns:
             self.this_station = pd.Series(self.nearby_data_df[self.station_id]).copy()
+            self.nearby_data_df = self.nearby_data_df.drop(self.station_id, axis=1)
         else:
             self.this_station = pd.Series()
-            print('No data for this station!')
-        self.nearby_data_df = self.nearby_data_df.drop(self.station_id, axis=1) # get rid of the closest data: this is the target data, not used in training
-        nearby_yesterday = self.nearby_data_df.copy()
-        nearby_yesterday.index = nearby_yesterday.index + pd.Timedelta('1D')
-        nearby_yesterday = nearby_yesterday.reindex(index=self.nearby_data_df.index)
-        nearby_yesterday.columns = [x+'_y' for x in nearby_yesterday.columns]
-        #self.nearby_data_df = pd.concat([self.nearby_data_df,nearby_yesterday],axis=1)
+            print('No data for this station!')        
         
-        # get the data for the other stations
-        self.other_stations = identify_nearby_stations(self.latlon,r_max,other_data,self.start_date,self.end_date)
+        # get the data for the auxillary stations
+        self.other_stations = identify_nearby_stations(self.latlon,r_max,other_data,start,end)
         self.other_stations = addon_stationid(self.other_stations)
         self.other_stations = remove_dup_stations(self.other_stations,ignore_closest=False)
         if self.ignoring is not None:
             print('   Removing stations with latitude '+str(self.ignoring[0]))
-            self.other_stations = self.other_stations[self.other_stations['Latitude']!=self.ignoring[0]].copy()
-        self.other_data_df = extract_nearby_values(self.other_stations,other_data,self.start_date,self.end_date)
-        #other_yesterday = self.other_data_df.copy()
-        #other_yesterday.index = other_yesterday.index + pd.Timedelta('1D')
-        #other_yesterday = other_yesterday.reindex(index=self.other_data_df.index)
-        #other_yesterday.columns = [x+'_y' for x in other_yesterday.columns]
-        #self.other_data_df = pd.concat([self.other_data_df,other_yesterday],axis=1)
+            self.other_stations = self.other_stations[self.other_stations['Latitude']!=self.ignoring[0]].copy()        
+        self.other_data_df = extract_nearby_values(self.other_stations,other_data,start,end)
         
     def plot_matrix_station(self):
         
-        import matplotlib.dates as mdates
-        import datetime as dt
+        #import matplotlib.dates as mdates
+        #import datetime as dt
                 
         fig = plt.figure(figsize=(12,6))
         if self.gs.empty:
@@ -232,7 +356,7 @@ class aq_station:
         # determine which features should be used for this model
         days = pd.Series(index=self.nearby_data_df.index,data=(self.nearby_data_df.index-self.nearby_data_df.index[0])/pd.Timedelta('1D'))
         days = days.rename('days')
-        self.gs,self.bs = feature_selection_rfe(pd.concat([days,self.nearby_data_df,self.other_data_df],axis=1),self.this_station) # nearby_data_df does NOT include the station to predict
+        self.gs,self.bs = feature_selection_rfe(pd.concat([self.nearby_data_df,self.other_data_df],axis=1),self.this_station,self.start_date,self.end_date) # nearby_data_df does NOT include the station to predict
             
         if self.gs.empty:
             print('No good sites found to make this model. No model being created...')
@@ -245,11 +369,17 @@ class aq_station:
         # create a model
         self.model = create_model_for_site(self.gs,self.this_station)
         
+        import sklearn.neural_network
+        if isinstance(self.model,sklearn.neural_network.MLPRegressor):
+            nn_viz_map(self)
+        
     def run_model(self):
-        self.composite_data = fill_with_model(self.gs,self.this_station.copy(),self.model)
+        gs_use = self.gs.copy()[(self.gs.index>=self.start_date)&(self.gs.index<=self.end_date)]
+        this_station_use = self.this_station.copy()[(self.this_station.index>=self.start_date)&(self.this_station.index<=self.end_date)]
+        self.composite_data = fill_with_model(gs_use,this_station_use,self.model)
         
         # plot the features and the value to predict
-        #self.plot_matrix_station()
+        self.plot_matrix_station()
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
@@ -306,6 +436,9 @@ def identify_sampling_rate(series):
 # with STATION DATA, not the metadata spreadsheet. This way we actually get 
 # sites that have data
 def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=False):
+    '''
+    Get the metadata for stations within r_max of latlon in df.
+    '''
     
     # separate latitude/longitude
     my_lat = latlon[0]
@@ -324,17 +457,15 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
     # add the datetime, so sites without data in our date range can be excluded
     param_stations['Date Local'] = pd.to_datetime(param_stations['Date Local'])
     param_stations = param_stations[(param_stations['Date Local']>=start_date)&(param_stations['Date Local']<=end_date)]
+    
+    #param_stations = addon_stationid(param_stations)
+    #param_stations = remove_dup_stations(param_stations,ignore_closest=False)
 
     return param_stations    
     
 # create a column of station ids
 def addon_stationid(df):
 
-    '''
-    if 'station_ids' in df.columns:
-        print('... the ids are already there!')
-        return df
-    '''
     # create column of station ids. this will be the index
     
     u_col = pd.Series(index=df.index,data='_')
@@ -359,7 +490,10 @@ def remove_dup_stations(param_stations,ignore_closest=False):
     param_stations = param_stations[~param_stations.index.duplicated(keep='first')]
     
     if ignore_closest:
-        param_stations = param_stations.iloc[1:,:]
+        #print 'removing:'
+        #print param_stations.iloc[0,:]
+        #param_stations = param_stations.iloc[1:,:]
+        param_stations = param_stations[param_stations['Distance']>0.5]
     
     return param_stations
     
@@ -394,6 +528,7 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
         
     return df
     
+'''
 # for a given set of stations, separate the ones that are full enough and those that aren't
 # only the full ones will be used
 def feature_selection(df,this_station,stations_to_keep=None):
@@ -413,12 +548,10 @@ def feature_selection(df,this_station,stations_to_keep=None):
     
     # df is now sorted by the correlation to the values (before missing values are filled in)
     
-    '''
     fig = plt.figure()
     ax = fig.add_subplot(111)
     matshow_dates(df,ax)
     ax.set_title('Stations considered for a model for '+str(this_station.name))
-    '''
                                       
     if len(missing_days)==0:
         missing_days = this_station.index
@@ -466,45 +599,70 @@ def feature_selection(df,this_station,stations_to_keep=None):
     print(str(len(good_stations_filtered.columns))+' good stations.')
         
     return good_stations_filtered, bad_stations
+'''
     
-def feature_selection_rfe(df,this_station,stations_to_keep=None):
+def feature_selection_rfe(df,this_station,start_date,end_date,stations_to_keep=None):
+    '''
+    Determine which nearby stations to use as predictors in filling in missing
+    data from this_station.
+    '''
     
-    missing_days = this_station.index[pd.isnull(this_station)]
-    known_days = this_station.index[pd.notnull(this_station)]
-    print('There are '+str(len(missing_days))+' missing days out of '+str(len(this_station))+' total days for this station.')
+    #df_duringpred = df[(df.index>=start_date)&(df.index<=end_date)]
+    
+    # get the known values of the station to predict during the prediction period
+    this_station_duringpred = this_station[(this_station.index>=start_date)&(this_station.index<=end_date)]
+    
+    missing_days_period = this_station_duringpred.index[pd.isnull(this_station_duringpred)]
+    known_days_period = this_station_duringpred.index[pd.notnull(this_station_duringpred)]
+    missing_days_all = this_station.index[pd.isnull(this_station)]
+    known_days_all = this_station.index[pd.notnull(this_station)]
+    
+    #print('There are '+str(len(missing_days))+' missing days out of '+str(len(this_station_duringpred))+' total days for this station.')
+    
+    print('During the prediction period, this station is missing '+str(len(missing_days_period))+' out of '+str(len(this_station_duringpred))+' total days.')
+    print('During the whole period, this station is missing '+str(len(missing_days_all))+' out of '+str(len(this_station))+' total days.')
     
     from sklearn.feature_selection import RFE
     #from sklearn.linear_model import LinearRegression
     from sklearn.tree import DecisionTreeRegressor
     
-    '''
     fig = plt.figure()
     ax = fig.add_subplot(111)
     matshow_dates(df,ax)
     ax.set_title('Stations considered for a model for '+str(this_station.name))
-    '''
     
     cols_to_consider = list()
     
-    # look at each column (data for a given station) and see if it's good or bad
+    # look at each column (data for a given station) and see if it's got enough datapoints
     for column in df:
         
         col_vals = df[column]
         
-        col_while_missing = col_vals[missing_days] # column while this_station is missing values
-        col_while_known = col_vals[known_days]
+        # for the period of prediction, determine when this potential predictor is/isn't missing data
+        col_while_missing_period = col_vals[missing_days_period]
+        col_while_known_period = col_vals[known_days_period]
+        col_while_missing_all = col_vals[missing_days_all]
+        col_while_known_all = col_vals[known_days_all]
         
         # now that the portion missing is calculated, fill in the missing values
         col_vals.loc[pd.isnull(col_vals)] = col_vals[pd.notnull(col_vals)].mean()
         
         # identify the portion of values missing from this predictor station (col) while
         # we also are/are not missing values from the station to predict (this_station).
-        num_missing_while_missing = len(col_while_missing[pd.isnull(col_while_missing)==True]) # missing days from (column when this_station is missing)
-        portion_missing_while_missing = float(num_missing_while_missing)/float(len(missing_days))
-        num_missing_while_known = len(col_while_known[pd.isnull(col_while_known)==True]) # missing days from (column when this_station is missing)
-        portion_missing_while_known = float(num_missing_while_known)/float(len(known_days))
+        num_missing_while_missing_period = len(col_while_missing_period[pd.isnull(col_while_missing_period)==True]) # missing days from (column when this_station is missing)
+        if len(missing_days_period)==0:
+            portion_missing_while_missing_period = 0
+        else:
+            portion_missing_while_missing_period = float(num_missing_while_missing_period)/float(len(missing_days_period))
+        num_missing_while_known_all = len(col_while_known_all[pd.isnull(col_while_known_all)==True]) # missing days from (column when this_station is missing)
+        if len(known_days_all)==0:
+            portion_missing_while_known_all = 1
+        else:
+            portion_missing_while_known_all = float(num_missing_while_known_all)/float(len(known_days_all))
         
-        consider_col = portion_missing_while_missing < (2*portion_missing_while_known)
+        consider_col = (portion_missing_while_missing_period < 0.2) & (portion_missing_while_known_all < 0.4)
+        
+        
         
         if consider_col==True:
             #print([portion_missing_while_missing,portion_missing_while_known])
@@ -517,8 +675,6 @@ def feature_selection_rfe(df,this_station,stations_to_keep=None):
     # choose how many stations to keep based on how many samples there will be to train on
     if stations_to_keep is None:
         stations_to_keep = min(15,max(1,int(len(known_y)/20)))
-    
-        
     
     model = DecisionTreeRegressor(max_depth=5)
     rfe = RFE(model,8)
@@ -611,8 +767,9 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl1_size = min(max(2,int(num_known/120)),len(predictors.columns)-2)
-    hl_size = (hl1_size,min(4,max(2,hl1_size/2))) # should probably depend on training data shape
+    hl1_size = max(1,min(max(2,int(num_known/180)),len(predictors.columns)-2))
+    #hl_size = (hl1_size,min(4,max(2,hl1_size/2))) # should probably depend on training data shape
+    hl_size = hl1_size
     #hl_size = (hl1_size,1) # should probably depend on training data shape
     print(str(hl_size)+' hidden layer nodes.')
     model = sklearn.neural_network.MLPRegressor(solver='lbfgs',alpha=1e-5,hidden_layer_sizes=(hl_size),activation='relu')
@@ -640,8 +797,8 @@ def create_model_for_site(predictors,site):
     r2_ML_train = r2_score(known_y[train_indx],model_train_predicted)
     
     # choose which model to use based on testing r2 value
-    if (r2_ML_test < 0) and (r2_lin_test < 0):
-        print('Both r2s < 0, not creating a model.')
+    if (r2_ML_test < .3) and (r2_lin_test < .3):
+        print('Both r2s < 0.3, not creating a model.')
         return None
         
     if r2_ML_test > r2_lin_test:
@@ -655,7 +812,6 @@ def create_model_for_site(predictors,site):
     #model_known_predicted = model.predict(known_x.iloc[train_indx])
     #r2_known_predicted = r2_score(known_y[train_indx],model_known_predicted)
     
-    '''
     # target vs predicted
     fig=plt.figure(figsize=(12,6))
     
@@ -680,7 +836,6 @@ def create_model_for_site(predictors,site):
     #plt.title(str(r2_ML_test)+', '+str(r2_ML_train))
     plt.pause(.1)
     plt.show()
-    '''
     
     #print(str(r2_lin)+', '+str(r2_predicted)+', '+str(r2_known_predicted))
     print('Linear: '+str(r2_lin_test)+' , '+str(r2_lin_train))
@@ -701,8 +856,6 @@ def fill_with_model(predictors,site,model):
         return known_y
     predicted_y = model.predict(unknown_x)
     
-    
-        
     # replace missing with the simulated, returning the composite
     composite_series = site.copy() # start with site data
     composite_series[pd.isnull(site)] = predicted_y.copy()
@@ -751,8 +904,6 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
     
     # perform weighted average of stations for this day 
     for date in dates:
-                
-        #print(date)
         
         # get weights for this day
         this_days_readings = nearby_data.loc[date,:]
@@ -773,12 +924,10 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
         #print(useful_metadata)
         useful_metadata = useful_metadata.iloc[0:min(len(available_stations),max_stations)]
         useful_metadata = create_station_weights(useful_metadata,max_stations=max_stations)
-        #print(useful_metadata)
                 
         weights_sum = 0
         values_sum = 0
         for station in useful_metadata.index:
-            #if pd.notnull(nearby_data.loc[date,station]):
             weights_sum = weights_sum + useful_metadata.loc[station,'weight']
             values_sum = values_sum + nearby_data.loc[date,station]*useful_metadata.loc[station,'weight']
 
@@ -885,15 +1034,14 @@ def plot_station_locs(stations,target_latlon):
     m.plot(x,y,'x',color = 'r',ms=8)
     
     return fig    
-    
-# do everything to get air quality data
-def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=False,return_lots=False):
+
+def create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=False):
     
     # this will store the metadata for each station that'll be used
     stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date) # look at the data to find ones close enough
     stations = addon_stationid(stations) # give each an id
     stations = remove_dup_stations(stations) # remove the duplicates
-    all_stations = stations.copy()
+    #all_stations = stations.copy()
     #stations = stations.ix[0:min(8,len(stations)),:]
 
     # get rid of the closest station if you want to use that for validation.
@@ -915,6 +1063,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         # get rid of this and other stations at that same location
         stations = stations[stations['Distance']>0.1]
         
+        '''
         print('Stations, before weights are computed:')
         print(stations)
         
@@ -927,6 +1076,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         plt.plot(target_data,label='target')
         plt.legend()
         plt.show()
+        '''
         
     else:
         closest_obj = None
@@ -961,7 +1111,7 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
         station_obj.start_date = start_date
         station_obj.end_date = end_date
         
-        # extract data from neaerby stations in the EPA database
+        # extract data from nearby stations in the EPA database
         station_obj.get_station_data(r_max_ML,all_data.copy(),other_data.copy())
         
         # make a copy of this station's original data
@@ -978,70 +1128,38 @@ def predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,ot
     print('-----------------------------------------------------------')
     print('Done filling in missing data from the nearby stations.')
     print('-----------------------------------------------------------')
+    
+    compare_dfs_plot(composite_data,orig)
+    
+    if ignore_closest==True:
+        return composite_data, orig, stations, station_obj_list, target_data
+    
+    return composite_data, orig, stations, station_obj_list
+    
+# do everything to get air quality data
+def predict_aq_vals(nearby_data,stations):
+    '''
+    
+    '''
+    
+    #composite_data, stations, orig = create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=ignore_closest)
         
     # using the composite dataset constructed above, perform the spatial interpolation algorithm
-    if composite_data.isnull().values.any():
+    if nearby_data.isnull().values.any():
         print('Recalculating weights for each day...')
-        data = spatial_interp_variable_weights(composite_data,stations)
+        data = spatial_interp_variable_weights(nearby_data,stations)
     else:
         print('No NaNs found, so using constant weights with...')
-        print(composite_data.columns)
+        print(nearby_data.columns)
         print(stations.index)
-        data = spatial_interp(composite_data,stations)   
+        data = spatial_interp(nearby_data,stations)   
         
     # plot the predicted, original, and composite data
-    final_big_plot(data,orig,composite_data,stations)    
-    compare_dfs_plot(composite_data,orig)
+    #final_big_plot(data,orig,composite_data,stations)    
+    
     
     
     print('Stations used for the interpolation:')
     print(stations)
-    
-    # if the closest station was ignored (for validation purposes), plot that
-    # known data against the predicted data
-    if ignore_closest:
-        
-        '''
-        # both time series
-        plt.figure()
-        plt.plot(data,label='predicted')
-        plt.plot(results_noML,label='predicted, no ML')
-        plt.plot(target_data,'.-',label='target')
-        plt.legend()
-        plt.show()
-        '''
-        '''
-        
-        from sklearn.metrics import r2_score
-        compare_df = pd.DataFrame()
-        compare_df['predicted'] = data.copy()
-        compare_df['target'] = target_data.copy()
-        compare_df['predicted_noML'] = results_noML.copy()
-        compare_df = compare_df[np.isfinite(compare_df['target'])]
-        r2 = r2_score(compare_df['predicted'],compare_df['target'])
-        
-        try:
-            # one against the other
-            plt.figure()
-            plt.scatter(compare_df['target'],compare_df['predicted'],label='with ML')
-            plt.scatter(compare_df['target'],compare_df['predicted_noML'],label='no ML')
-            plt.plot([0,0],[data.max(),data.max()])
-            plt.legend()
-            plt.ylabel('Predicted')
-            plt.xlabel('Target')
-            plt.show()
-        except:
-            print('error plotting')
-        '''
-            
-        if return_lots == True:
-            return data, target_data, results_noML, station_obj_list, composite_data, orig, all_stations
-        else:
-            return data, target_data, results_noML
-    
-    else:
-        
-        if return_lots==False:
-            return data
-        else:
-            return data, station_obj_list, composite_data, orig, all_stations
+
+    return data

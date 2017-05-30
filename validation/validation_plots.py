@@ -20,7 +20,7 @@ results = object_file[0].drop('Comments',1).dropna(axis=0,how='any')
 results = results.set_index(np.arange(len(results)))
 '''
 
-results = pd.read_csv('validation_170515_11-15.csv')
+#results = pd.read_csv('validation_170515_11-15.csv')
 
 #results = results.drop(results.columns[2],1).dropna(axis=0,how='any')
 results = results.set_index(np.arange(len(results)))

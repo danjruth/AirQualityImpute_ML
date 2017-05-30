@@ -12,11 +12,13 @@ import numpy as np
 
 ### ---- USER INPUTS ---- ###
 
-start_date = '2011-01-01'
-end_date = '2015-12-31'
 
-r_max_interp = 100 # how far from latlon of interest should it look for stations?
+
+r_max_interp = 150 # how far from latlon of interest should it look for stations?
 r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
+
+start_date = '2012-01-01'
+end_date = '2014-12-31'
 
 all_data_all = aq.extract_raw_data(start_date,end_date,param_code=81102)
 
@@ -28,7 +30,7 @@ other_data_all = pd.concat([pm25_data,CO_data])
 other_data_all = other_data_all.set_index(pd.Series(data=range(len(other_data_all)))) # reindex to get rid of duplicate indices (index here is not significant)
 
 latlons = pd.read_csv('C:\Users\danjr\Documents\ML\Air Quality\Code\\test_locations.csv')
-results = latlons.sample(20)
+results = latlons.sample(1)
 results_dict = {}
 
 for ix in results.index:
@@ -41,9 +43,21 @@ for ix in results.index:
         all_data = all_data.sort_values('Date Local')
         other_data = other_data.sort_values('Date Local')
         
-        data, target_data, results_noML, station_obj_list, composite_data, orig, all_stations = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)
+        #data, target_data, results_noML, station_obj_list, composite_data, orig, all_stations = aq.predict_aq_vals(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=True,return_lots=True)
     
-        results_dict[ix] = (data, target_data, results_noML, station_obj_list, composite_data, orig, all_stations)
+        start_date = '2013-01-01'
+        end_date = '2014-12-31'
+        composite_data, orig, stations, station_obj_list, target_data = aq.create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data.copy(),other_data.copy(),ignore_closest=True)
+        data = aq.predict_aq_vals(composite_data,stations)
+        
+        nearby_stations = aq.identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date)
+        nearby_stations = aq.addon_stationid(nearby_stations)
+        nearby_stations = aq.remove_dup_stations(nearby_stations,ignore_closest=True)    
+        nearby_data = aq.extract_nearby_values(nearby_stations,all_data.copy(),start_date,end_date)
+        results_noML = aq.spatial_interp_variable_weights(nearby_data,nearby_stations,max_stations=10)
+        
+        target_data = target_data[(target_data.index>=start_date)&(target_data.index<=end_date)]
+        results_dict[ix] = (data, target_data, results_noML, station_obj_list, composite_data, orig)
         
         compare_df = pd.DataFrame()
         compare_df['predicted'] = data.copy()
@@ -110,6 +124,27 @@ for ix in results.index:
         results.loc[ix,'mae_noML'] = mae_noML
         results.loc[ix,'mae_roll'] = mae_roll
         results.loc[ix,'mae_roll_noML'] = mae_roll_noML
+        
+        # plot the results against target data
+        fig = plt.figure(figsize=(12,6))
+        ax1 = fig.add_subplot(211)
+        ax1.plot(results_noML,'.-',color='gray',label='predicted, without imputation')
+        ax1.plot(data,'.-',color='k',label='predicted, with imputation')
+        ax1.plot(target_data,'.-',color='green',label='target')
+        ax1.legend()
+        ax1.set_title('Instantaneous')
+        plt.show()
+        
+        # plot the results against target data
+        ax2 = fig.add_subplot(212,sharex=ax1,sharey=ax1)
+        ax2.plot(results_noML.rolling(window=win,min_periods=0).mean(),'.-',color='gray',label='predicted, without imputation')
+        ax2.plot(data.rolling(window=win,min_periods=0).mean(),'.-',color='k',label='predicted, with imputation')
+        ax2.plot(target_data.rolling(window=win,min_periods=0).mean(),'.-',color='green',label='target')
+        ax2.set_title('Rolling')
+        ax2.legend()
+        ax1.set_ylabel('PM10 Concentration')
+        ax2.set_ylabel('PM10 Concentration')
+        plt.show()
         
         print(results)
         

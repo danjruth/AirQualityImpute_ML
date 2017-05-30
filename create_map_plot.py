@@ -32,8 +32,9 @@ plt.show()
 param_colors = {88101:'g',44201:'c',42101:'m'}
 
 # plot each EPA site on the map, and connect it to the soiling station with a line whose width is proportional to the weight
+
 for station in station_obj_list:
-    
+
     for nearby_station_indx in station.nearby_stations.index:
         
         if nearby_station_indx in station.gs.columns:
@@ -56,12 +57,12 @@ for station in station_obj_list:
             (x,y) = m(other_station['Longitude'],other_station['Latitude'])
             m.plot(x,y,'^',color = param_colors[other_station['Parameter Code']],ms=5,alpha=0.5)
         
-for station in station_obj_list:
-    (x,y) = m(station.latlon[1],station.latlon[0])
-    m.plot(x,y,'o',color = 'k',ms=9)
-    
-    (x,y) = m([station.latlon[1],latlon[1]],[station.latlon[0],latlon[0]])
-    m.plot(x,y,'-',color='k',lw=2)
-    
-(x,y) = m(latlon[1],latlon[0])
-m.plot(x,y,'x',color = 'r',lw=5,ms=20)
+    for station in station_obj_list:
+        (x,y) = m(station.latlon[1],station.latlon[0])
+        m.plot(x,y,'o',color = 'k',ms=9)
+        
+        (x,y) = m([station.latlon[1],latlon[1]],[station.latlon[0],latlon[0]])
+        m.plot(x,y,'-',color='k',lw=2)
+            
+        (x,y) = m(latlon[1],latlon[0])
+        m.plot(x,y,'x',color = 'r',lw=5,ms=20)
