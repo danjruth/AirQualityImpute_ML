@@ -45,6 +45,8 @@ def nn_viz_map(station,ax=None):
     
     all_nearby_stations = pd.concat([station.nearby_stations,station.other_stations])    
     
+    nearby_stations = [n for n in station.gs.columns if n in all_nearby_stations.index]
+    
     '''
     Set up the extent of the basemap
     '''
@@ -129,15 +131,17 @@ def nn_viz_map(station,ax=None):
     '''
     
     hl_size = station.model.hidden_layer_sizes
-    nearby_stations = [n for n in station.gs.columns if n in all_nearby_stations.index]
+    
     
     # plot the input layer
     weights_sum_dict = {}
+    weights_max_dict = {} # max. abs. of the weights going into a node
     neuron_loc_dict = {}
     for hl_num in range(hl_size):
         weighted_x = 0
         weighted_y = 0
         weights_sum = 0
+        weights_max_dict[hl_num] = 0
         for ix,nearby_station_indx in enumerate(nearby_stations):
             nearby_station = all_nearby_stations.loc[nearby_station_indx]
             (x,y) = m([nearby_station['Longitude']],[nearby_station['Latitude']])
@@ -149,14 +153,16 @@ def nn_viz_map(station,ax=None):
             weighted_x = weighted_x + x*weight
             weighted_y = weighted_y + y*weight
             weights_sum= weights_sum + weight
+            weights_max_dict[hl_num] = max(abs(weight),weights_max_dict[hl_num])
             
         x = weighted_x / weights_sum
         y = weighted_y / weights_sum
         weights_sum_dict[hl_num] = weights_sum
+        
         neuron_loc_dict[hl_num] = (x,y)
         ax.plot([x],[y],'o',color='b',lw=1,zs=1)            
         
-    for nearby_station_indx in nearby_stations:
+    for ix,nearby_station_indx in enumerate(nearby_stations):
         
         nearby_station = all_nearby_stations.loc[nearby_station_indx]
         (x,y) = m([nearby_station['Longitude']],[nearby_station['Latitude']])
@@ -164,11 +170,12 @@ def nn_viz_map(station,ax=None):
         
         for hl_num in range(hl_size):
             weight = abs(station.model.coefs_[0][ix,hl_num])            
-            ax.plot([x[0],neuron_loc_dict[hl_num][0]],[y[0],neuron_loc_dict[hl_num][1]],zs=[0,1],color='k',lw=float(weight/weights_sum_dict[hl_num])*3)
+            ax.plot([x[0],neuron_loc_dict[hl_num][0]],[y[0],neuron_loc_dict[hl_num][1]],zs=[0,1],color='k',lw=float(weight)/weights_max_dict[hl_num]*3,alpha=0.6)
       
     weighted_x = 0
     weighted_y = 0
     weights_sum = 0      
+    weights_max = 0
     
     for hl1_num in range(hl_size):
         
@@ -178,6 +185,7 @@ def nn_viz_map(station,ax=None):
         weighted_x = weighted_x + x*weight
         weighted_y = weighted_y + y*weight
         weights_sum= weights_sum + weight
+        weights_max = max(weights_max,abs(weight))
         
     final_x = weighted_x / weights_sum
     final_y = weighted_y / weights_sum
@@ -187,7 +195,7 @@ def nn_viz_map(station,ax=None):
         weight = abs(station.model.coefs_[1][hl1_num])
             
         (x,y) = neuron_loc_dict[hl1_num]
-        ax.plot([final_x[0],neuron_loc_dict[hl1_num][0]],[final_y[0],neuron_loc_dict[hl1_num][1]],zs=[2,1],color='k',lw=float(weight/weights_sum)*3)
+        ax.plot([final_x[0],neuron_loc_dict[hl1_num][0]],[final_y[0],neuron_loc_dict[hl1_num][1]],zs=[2,1],color='k',lw=float(weight/weights_max)*3,alpha=0.6)
             
     # column for the "output" station
     (x_target,y_target) = m([station.latlon[1]],[station.latlon[0]])
@@ -367,7 +375,7 @@ class aq_station:
         self.gs = fill_missing_predictors(self.gs)
         
         # create a model
-        self.model = create_model_for_site(self.gs,self.this_station)
+        self.model,self.model_r2 = create_model_for_site(self.gs,self.this_station)
         
         import sklearn.neural_network
         if isinstance(self.model,sklearn.neural_network.MLPRegressor):
@@ -465,19 +473,13 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
     
 # create a column of station ids
 def addon_stationid(df):
-
-    # create column of station ids. this will be the index
-    
-    u_col = pd.Series(index=df.index,data='_')
-    
+    '''
+    Given a dataframe of stations, add on a column with the "station id" string
+    (identifying its type, state, county, and POC).
+    '''
+    u_col = pd.Series(index=df.index,data='_')    
     station_ids = df['Parameter Code'].map(str)+u_col+df['State Code'].map(str)+u_col+df['County Code'].map(str)+u_col+df['Site Number'].map(str)+u_col+df['POC'].map(str)
-    
-    '''
-    station_ids = pd.Series(index=df.index)
-    for i in station_ids.index:
-        station_ids.loc[i] = str(df.loc[i]['Parameter Code'])+'_'+str(df.loc[i]['State Code'])+'_'+str(df.loc[i]['County Code'])+'_'+str(df.loc[i]['Site Number'])+'_'+str(df.loc[i]['POC'])
-    '''
-    
+
     df['station_ids'] = station_ids    
     
     return df
@@ -677,7 +679,10 @@ def feature_selection_rfe(df,this_station,start_date,end_date,stations_to_keep=N
         stations_to_keep = min(15,max(1,int(len(known_y)/20)))
     
     model = DecisionTreeRegressor(max_depth=5)
-    rfe = RFE(model,8)
+    n_features = max(3,min(int(float(len(known_days_all))/float(50)),10))
+    print('Picking out '+str(n_features)+' predictor stations.')
+    rfe = RFE(model,n_features)
+    
     fit = rfe.fit(known_x,known_y)
     #print(fit)
     
@@ -767,7 +772,7 @@ def create_model_for_site(predictors,site):
     # neural network
     import sklearn.neural_network
     #HL1_size = int(len(predictors.columns)*)
-    hl1_size = max(1,min(max(2,int(num_known/180)),len(predictors.columns)-2))
+    hl1_size = max(2,min(max(2,int(num_known/180)),len(predictors.columns)-2))
     #hl_size = (hl1_size,min(4,max(2,hl1_size/2))) # should probably depend on training data shape
     hl_size = hl1_size
     #hl_size = (hl1_size,1) # should probably depend on training data shape
@@ -799,7 +804,7 @@ def create_model_for_site(predictors,site):
     # choose which model to use based on testing r2 value
     if (r2_ML_test < .3) and (r2_lin_test < .3):
         print('Both r2s < 0.3, not creating a model.')
-        return None
+        return None, None
         
     if r2_ML_test > r2_lin_test:
         model = model
@@ -841,7 +846,7 @@ def create_model_for_site(predictors,site):
     print('Linear: '+str(r2_lin_test)+' , '+str(r2_lin_train))
     print('ML    : '+str(r2_ML_test)+' , '+str(r2_ML_train))
         
-    return model
+    return model, (r2_ML_test,r2_lin_test)
 
 # use the model to fill the missing data, returning a "composite" series
 def fill_with_model(predictors,site,model):
@@ -1036,13 +1041,17 @@ def plot_station_locs(stations,target_latlon):
     return fig    
 
 def create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=False):
+    '''
+    Create a composite dataset containing the measured and simulated air
+    quality values at the stations around latlon. This composite dataset can be
+    used to predict the air quality at latlon.
+    '''
     
-    # this will store the metadata for each station that'll be used
-    stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date) # look at the data to find ones close enough
+    # Look at the data to determine which stations are within r_max_interp of
+    # the location of interest, latlon.
+    stations = identify_nearby_stations(latlon,r_max_interp,all_data.copy(),start_date,end_date)
     stations = addon_stationid(stations) # give each an id
     stations = remove_dup_stations(stations) # remove the duplicates
-    #all_stations = stations.copy()
-    #stations = stations.ix[0:min(8,len(stations)),:]
 
     # get rid of the closest station if you want to use that for validation.
     # also save its reading so you can compare later
@@ -1050,6 +1059,11 @@ def create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,al
     if ignore_closest:
         closest = stations.index[0]
         print('Ignoring the closest station: '+closest+', which is at ('+str(stations.loc[closest,'Latitude'])+', '+str(stations.loc[closest,'Longitude'])+').')
+        
+        # ensure that the coords of this "closest" station are actually the
+        # coords being simulated
+        if (abs(stations.loc[closest,'Latitude'] - latlon[0]) > 0.001) or (abs(stations.loc[closest,'Longitude'] - latlon[1]) > 0.001):
+            raise(ValueError('Input latlon and closest station coordinates do not match!'))
         
         closest_obj = aq_station(closest)
         closest_obj.latlon = (stations.loc[closest,'Latitude'],stations.loc[closest,'Longitude'])
