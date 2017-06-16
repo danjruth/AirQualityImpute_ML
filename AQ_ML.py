@@ -351,8 +351,19 @@ class aq_station:
         ax1.plot(self.composite_data,'.-',color='red',label='Imputed data')
         ax1.plot(self.this_station,'.-',lw=2,color='k',label='Original data')
         ax1.set_ylabel(self.this_station.name)
+        ax1.set_title('r2 = '+str(self.model_r2))
         #ax1.set_ylabel('Output station')
         ax1.legend()
+        
+        roll_known = self.this_station.rolling(window=14,center=True,min_periods=0)
+        roll_pred = self.composite_data.rolling(window=14,center=True,min_periods=0)
+        
+        from sklearn.metrics import r2_score
+        
+        rolling_corr = roll_known.r2_score(r2_score,args=(self.composite_data,))
+        
+        ax3 = ax1.twinx()
+        ax3.plot(rolling_corr,color='c')
         
         plt.show()
         plt.pause(.1)

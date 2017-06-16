@@ -17,7 +17,7 @@ import numpy as np
 r_max_interp = 150 # how far from latlon of interest should it look for stations?
 r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
-start_date = '2012-01-01'
+start_date = '2011-01-01'
 end_date = '2014-12-31'
 
 '''
@@ -34,7 +34,7 @@ other_data_all = other_data_all.set_index(pd.Series(data=range(len(other_data_al
 #latlons = pd.read_csv('C:\Users\danjr\Documents\ML\Air Quality\Code\\validation\\test_locations.csv')
 latlons = pd.read_csv(r'C:\Users\druth\Documents\AirQualityImpute_ML\validation\test_locations.csv')
 #latlons = latlons.iloc[31:,:]
-ix = 21
+ix = 34
 results = pd.DataFrame(columns=latlons.columns)
 results.loc[ix,:] = latlons.loc[ix,:]
 results_dict = {}
