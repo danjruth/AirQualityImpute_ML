@@ -375,6 +375,7 @@ class aq_station:
         self.gs = fill_missing_predictors(self.gs)
         
         # create a model
+        self.gs_columns = tuple(self.gs.columns)
         self.model,self.model_r2 = create_model_for_site(self.gs,self.this_station)
         
         import sklearn.neural_network
@@ -384,15 +385,18 @@ class aq_station:
     def run_model(self):
         gs_use = self.gs.copy()[(self.gs.index>=self.start_date)&(self.gs.index<=self.end_date)]
         this_station_use = self.this_station.copy()[(self.this_station.index>=self.start_date)&(self.this_station.index<=self.end_date)]
+        gs_use = gs_use[list(self.gs_columns)]
         self.composite_data = fill_with_model(gs_use,this_station_use,self.model)
         
         # plot the features and the value to predict
         self.plot_matrix_station()
+        
+        self.composite_data[pd.notnull(self.this_station)] = self.this_station
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    #folder = 'C:\Users\druth\Documents\epa_data\\'
+    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -721,6 +725,11 @@ def fill_missing_predictors(predictors):
 # into known and unknown
 def split_known_unknown_rows(predictors,site):
     
+    known_x = predictors[pd.notnull(site)]
+    known_y = site[pd.notnull(site)]
+    unknown_x = predictors[pd.isnull(site)]
+    
+    '''
     # split up known rows from unkown rows
     have_out_vals = np.isnan(site)
     have_out_vals = np.where(have_out_vals==False)[0]
@@ -730,6 +739,7 @@ def split_known_unknown_rows(predictors,site):
     known_x = predictors.iloc[have_out_vals,:].copy()
     known_y = site[have_out_vals].copy()
     unknown_x = predictors.iloc[need_out_vals,:].copy()
+    '''
     
     return known_x,known_y,unknown_x
     
@@ -851,6 +861,8 @@ def create_model_for_site(predictors,site):
 # use the model to fill the missing data, returning a "composite" series
 def fill_with_model(predictors,site,model):
     
+    print predictors.columns
+    
     if model is None:
         return site
     
@@ -859,14 +871,19 @@ def fill_with_model(predictors,site,model):
     
     if len(unknown_x)==0:
         return known_y
-    predicted_y = model.predict(unknown_x)
+    print unknown_x.columns
+    predicted_y = model.predict(predictors)
+    predicted_y = pd.Series(index=predictors.index,data=predicted_y)
     
+    '''
     # replace missing with the simulated, returning the composite
     composite_series = site.copy() # start with site data
-    composite_series[pd.isnull(site)] = predicted_y.copy()
+    composite_series[predicted_y.index] = predicted_y.copy()
     composite_series.loc[composite_series<0] = 0 # just in case
+    '''
+    composite_series = predicted_y
     
-    return composite_series    
+    return composite_series
     
 # once nearby stations have been picked, add on a column of their weights (for
 # the spatial interpolation algorithm)
@@ -909,6 +926,8 @@ def spatial_interp_variable_weights(nearby_data,nearby_metadata,max_stations=10)
     
     # perform weighted average of stations for this day 
     for date in dates:
+        
+        print date
         
         # get weights for this day
         this_days_readings = nearby_data.loc[date,:]
