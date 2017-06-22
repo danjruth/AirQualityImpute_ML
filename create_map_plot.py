@@ -9,6 +9,19 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import numpy as np
 
+'''
+Run this script to visualize the procedure used to estimate the air quality at
+a point, when the missing data from the EPA dataset has been imputed.
+
+The map will include the location of the estimation point (the red X), the 
+location of the surrounding air quality stations used in the interpolation
+(black circles), and the location of the air quality stations used in the 
+models for each interpolation station.
+
+This script relies on variables that are created when running the estimation
+procedure, so this script should be run right after running the estimation.
+'''
+
 r_max = r_max_interp+r_max_ML
 
 fig = plt.figure(figsize=(15, 8), facecolor='w')    

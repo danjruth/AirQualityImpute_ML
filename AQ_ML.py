@@ -9,18 +9,26 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+'''
+This module contains functions for extracting air quality data from the EPA AQS
+dataset, imputing missing data, and estimating the air quality with a method
+similar to that of Falke and Husar as described here: 
+http://capita.wustl.edu/capita/capitareports/mappingairquality/mappingaqi.pdf
+'''
+
 # some constants
 R_earth =  6371.0 # [km]
 
 def matshow_dates(df,ax):
+    '''
+    Plot a dataframe as a matrix color plot, using the dates in the index as 
+    the x-axis
+    '''
+    
     import matplotlib.dates as mdates
     xlims = [mdates.date2num(pd.to_datetime(df.index[x])) for x in[0,-1]]
-    #from sklearn.preprocessing import scale
-    #ax.matshow(scale(df.copy().transpose(),axis=1),aspect='auto',extent=[xlims[0],xlims[1],len(df.columns),0],origin='upper')
     ax.matshow(df.copy().transpose(),aspect='auto',extent=[xlims[0],xlims[1],len(df.columns),0],origin='upper')
-    #tick_labels = ['Predictor '+str(i) for i in range(len(df.columns))]
     ax.set_yticklabels(df.columns.values)
-    #ax.set_yticklabels(tick_labels)
     ax.set_yticks([x+0.5 for x in range(0,len(df.columns.values))])
     ax.xaxis.tick_bottom()
     ax.xaxis_date()
@@ -28,7 +36,6 @@ def matshow_dates(df,ax):
     plt.pause(0.01)
     plt.show()
     return ax
-
 
 def nn_viz_map(station,ax=None):
     '''
@@ -206,6 +213,7 @@ def nn_viz_map(station,ax=None):
     
     plt.show()
     
+'''
 def nn_viz(model,predictor_names):
     
     fig = plt.figure()
@@ -263,20 +271,13 @@ def nn_viz(model,predictor_names):
         
     # plot the inputs
     #for x in 
-
-# plot a matrix of nearby station values, labeling each station
-'''
-def matrix_val_plot(df,fig=None):
-    if fig==None:
-        fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.matshow(df.copy().transpose(),aspect='auto')
-    ax.set_yticklabels(df.columns.values)
-    ax.set_yticks(range(0,len(df.columns.values)))
-    return fig
 '''
     
 def compare_dfs_plot(composite,original):
+    '''
+    After the imputation procedure is run, compare the original and composite
+    datasets by plotting each as matrices.
+    '''
     fig = plt.figure(figsize=(7,9))
     
     ax1 = fig.add_subplot(211)
@@ -286,8 +287,13 @@ def compare_dfs_plot(composite,original):
     matshow_dates(composite,ax2)
     
 
-# class for a station that'll have data imputed
 class aq_station:
+    '''
+    Class for an air quality station. Includes methods to get and manipulate 
+    the station's data and to impute the missing data based on data from other
+    stations nearby.
+    '''
+    
     def __init__(self,station_id,ignoring=None):
         self.station_data_series = pd.Series()
         self.nearby_stations = pd.DataFrame()
@@ -336,11 +342,14 @@ class aq_station:
         
     def plot_matrix_station(self):
         
+        #print('Making plot for this station!')
+        
         #import matplotlib.dates as mdates
         #import datetime as dt
                 
         fig = plt.figure(figsize=(12,6))
         if self.gs.empty:
+            print('   ...good sites are empty.')
             return fig
 
         ax1 = fig.add_subplot(211)
@@ -357,10 +366,10 @@ class aq_station:
         
         roll_known = self.this_station.rolling(window=14,center=True,min_periods=0)
         roll_pred = self.composite_data.rolling(window=14,center=True,min_periods=0)
+                
+        #from sklearn.metrics import r2_score
         
-        from sklearn.metrics import r2_score
-        
-        rolling_corr = roll_known.r2_score(r2_score,args=(self.composite_data,))
+        rolling_corr = roll_known.mean() / roll_pred.mean()
         
         ax3 = ax1.twinx()
         ax3.plot(rolling_corr,color='c')
@@ -406,8 +415,8 @@ class aq_station:
 
 def extract_raw_data(start_date,end_date,param_code=81102):
     
-    #folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
-    folder = 'C:\Users\druth\Documents\epa_data\\'
+    folder = 'C:\Users\danjr\Documents\ML\Air Quality\data\\'
+    #folder = 'C:\Users\druth\Documents\epa_data\\'
     
     start_year = pd.to_datetime(start_date).year
     end_year = pd.to_datetime(end_date).year
@@ -441,8 +450,11 @@ def lat_lon_dist(point1,point2):
     
     return d
     
-# look at data from an EPA station and guess if it's on the 1, 3, 6, or 12 day schedule
 def identify_sampling_rate(series):
+    '''
+    Given a series of reported data from a station, infer if it's on the 1, 3,
+    6, or 12 day reporting schedule.
+    '''
     
     is_nan = pd.isnull(series)        
     good_dates = series.index[is_nan==False]
@@ -455,9 +467,6 @@ def identify_sampling_rate(series):
     
     return estimated_rate
     
-# with a given latlon and r_max, pick out stations within that radius from a df
-# with STATION DATA, not the metadata spreadsheet. This way we actually get 
-# sites that have data
 def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=False):
     '''
     Get the metadata for stations within r_max of latlon in df.
@@ -486,7 +495,6 @@ def identify_nearby_stations(latlon,r_max,df,start_date,end_date,ignore_closest=
 
     return param_stations    
     
-# create a column of station ids
 def addon_stationid(df):
     '''
     Given a dataframe of stations, add on a column with the "station id" string
@@ -499,17 +507,19 @@ def addon_stationid(df):
     
     return df
     
-# remove duplicate stations based on the station id (already created)
 def remove_dup_stations(param_stations,ignore_closest=False):
+    '''
+    Remove duplicate rows (corresponding to the same station).
+    
+    Also, get rid of all stations within 0.5 km of the "target" location, if
+    desired (this is used in validation).
+    '''
     
     # make the IDS the index, and get rid of duplicates
     param_stations = param_stations.set_index('station_ids')
     param_stations = param_stations[~param_stations.index.duplicated(keep='first')]
     
     if ignore_closest:
-        #print 'removing:'
-        #print param_stations.iloc[0,:]
-        #param_stations = param_stations.iloc[1:,:]
         param_stations = param_stations[param_stations['Distance']>0.5]
     
     return param_stations
@@ -517,6 +527,10 @@ def remove_dup_stations(param_stations,ignore_closest=False):
 # pick out the values from stations nearby.
 # this is called separately for the main and auxilliary dataframes
 def extract_nearby_values(stations,all_data,start_date,end_date):
+    '''
+    Given some stations in the input stations and a df of lots of stations'
+    readings in all_data, extract the readings from the desired stations.
+    '''
     
     print('Extracting nearby values...')
         
@@ -544,88 +558,13 @@ def extract_nearby_values(stations,all_data,start_date,end_date):
             df = pd.concat([df,site_series],axis=1)
         
     return df
-    
-'''
-# for a given set of stations, separate the ones that are full enough and those that aren't
-# only the full ones will be used
-def feature_selection(df,this_station,stations_to_keep=None):
-    
-    good_stations = pd.DataFrame()
-    bad_stations = pd.DataFrame()
-    
-    missing_days = this_station.index[pd.isnull(this_station)]
-    known_days = this_station.index[pd.notnull(this_station)]
-    print('There are '+str(len(missing_days))+' missing days out of '+str(len(this_station))+' total days for this station.')
-    
-    corr_vals = pd.Series(index=df.columns)
-    for station in corr_vals.index:
-        corr_vals[station] = df[station].corr(this_station)
-    corr_vals = corr_vals.sort_values(ascending=False)
-    df = df[corr_vals.index]
-    
-    # df is now sorted by the correlation to the values (before missing values are filled in)
-    
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    matshow_dates(df,ax)
-    ax.set_title('Stations considered for a model for '+str(this_station.name))
-                                      
-    if len(missing_days)==0:
-        missing_days = this_station.index
 
-    # look at each column (data for a given station) and see if it's good or bad
-    for column in df:
-        
-        col_vals = df[column]
-        col_while_missing = col_vals[missing_days] # column while this_station is missing values
-        col_while_known = col_vals[known_days]
-        
-        rate = identify_sampling_rate(col_vals)
-        
-        # identify the portion of values missing from this predictor station (col) while
-        # we also are/are not missing values from the station to predict (this_station).
-        num_missing_while_missing = len(col_while_missing[pd.isnull(col_while_missing)==True]) # missing days from (column when this_station is missing)
-        portion_missing_while_missing = float(num_missing_while_missing)/float(len(missing_days))
-        num_missing_while_known = len(col_while_known[pd.isnull(col_while_known)==True]) # missing days from (column when this_station is missing)
-        portion_missing_while_known = float(num_missing_while_known)/float(len(known_days))
-        
-        # now that the portion missing is calculated, fill in the missing values
-        col_vals.loc[pd.isnull(col_vals)] = col_vals[pd.notnull(col_vals)].mean()
-                  
-        # criteria for using the site: mostly daily and not missing much
-        enough_data = (rate==pd.Timedelta('1d')) & (portion_missing_while_missing < 0.1) & (portion_missing_while_known < 0.1)
-        if enough_data:
-            good_stations = pd.concat([good_stations,col_vals],axis=1)
-        else:
-            bad_stations = pd.concat([bad_stations,col_vals],axis=1)    
-    
-    # choose how many stations to keep based on how many samples there will be to train on
-    if stations_to_keep is None:
-        stations_to_keep = min(15,max(1,int(len(known_days)/20)))
-    
-    corr_vals = pd.Series(index=good_stations.columns)
-    for station in corr_vals.index:
-        corr_vals[station] = good_stations[station].corr(this_station)
-    corr_vals = corr_vals.sort_values(ascending=False)
-    corr_vals = corr_vals[corr_vals>0.25]
-    
-    cols_to_keep = corr_vals.index.tolist()[0:min(stations_to_keep,len(corr_vals))]
-    good_stations_filtered = good_stations.loc[:,cols_to_keep]
-    #good_stations_filtered['date'] = 
-    
-    print(str(len(good_stations_filtered.columns))+' good stations.')
-        
-    return good_stations_filtered, bad_stations
-'''
-    
 def feature_selection_rfe(df,this_station,start_date,end_date,stations_to_keep=None):
     '''
     Determine which nearby stations to use as predictors in filling in missing
     data from this_station.
     '''
-    
-    #df_duringpred = df[(df.index>=start_date)&(df.index<=end_date)]
-    
+        
     # get the known values of the station to predict during the prediction period
     this_station_duringpred = this_station[(this_station.index>=start_date)&(this_station.index<=end_date)]
     
@@ -657,8 +596,8 @@ def feature_selection_rfe(df,this_station,start_date,end_date,stations_to_keep=N
         
         # for the period of prediction, determine when this potential predictor is/isn't missing data
         col_while_missing_period = col_vals[missing_days_period]
-        col_while_known_period = col_vals[known_days_period]
-        col_while_missing_all = col_vals[missing_days_all]
+        #col_while_known_period = col_vals[known_days_period]
+        #col_while_missing_all = col_vals[missing_days_all]
         col_while_known_all = col_vals[known_days_all]
         
         # now that the portion missing is calculated, fill in the missing values
@@ -677,9 +616,9 @@ def feature_selection_rfe(df,this_station,start_date,end_date,stations_to_keep=N
         else:
             portion_missing_while_known_all = float(num_missing_while_known_all)/float(len(known_days_all))
         
-        consider_col = (portion_missing_while_missing_period < 0.2) & (portion_missing_while_known_all < 0.4)
-        
-        
+        # consider when/how much data is missing and decide whether or not to 
+        # use this station as a predictor
+        consider_col = (portion_missing_while_missing_period < 0.2) & (portion_missing_while_known_all < 0.4)       
         
         if consider_col==True:
             #print([portion_missing_while_missing,portion_missing_while_known])
@@ -740,22 +679,13 @@ def split_known_unknown_rows(predictors,site):
     known_y = site[pd.notnull(site)]
     unknown_x = predictors[pd.isnull(site)]
     
-    '''
-    # split up known rows from unkown rows
-    have_out_vals = np.isnan(site)
-    have_out_vals = np.where(have_out_vals==False)[0]
-    need_out_vals = ~np.isnan(site)
-    need_out_vals = np.where(need_out_vals==False)[0]
-    
-    known_x = predictors.iloc[have_out_vals,:].copy()
-    known_y = site[have_out_vals].copy()
-    unknown_x = predictors.iloc[need_out_vals,:].copy()
-    '''
-    
     return known_x,known_y,unknown_x
     
-# given training data, create a model that'll be used to predict the missing data
 def create_model_for_site(predictors,site):
+    '''
+    Create a linear model or neural network to fill in the missing data for a
+    site.
+    '''
     
     from sklearn.metrics import r2_score    
     
@@ -1183,11 +1113,11 @@ def create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,al
 # do everything to get air quality data
 def predict_aq_vals(nearby_data,stations):
     '''
-    
+    Given nearby data (which could be the original or composite dataset) and 
+    weights associated with each station in the input stations, interpolate to
+    get the air quality at a point.
     '''
-    
-    #composite_data, stations, orig = create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data,other_data,ignore_closest=ignore_closest)
-        
+            
     # using the composite dataset constructed above, perform the spatial interpolation algorithm
     if nearby_data.isnull().values.any():
         print('Recalculating weights for each day...')
@@ -1197,11 +1127,6 @@ def predict_aq_vals(nearby_data,stations):
         print(nearby_data.columns)
         print(stations.index)
         data = spatial_interp(nearby_data,stations)   
-        
-    # plot the predicted, original, and composite data
-    #final_big_plot(data,orig,composite_data,stations)    
-    
-    
     
     print('Stations used for the interpolation:')
     print(stations)

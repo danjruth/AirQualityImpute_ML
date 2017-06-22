@@ -58,11 +58,14 @@ for station in rows_to_test.index:
             res.loc[station,data_ranges] = None
             plt.pause(1) # give time to actually cancel the execution
             
-    res.to_pickle(r'C:\Users\danjr\Documents\ML\Air Quality\time_periods_testb.pkl')
-    plt.close('all')
+        plt.close('all')
+            
+    res.to_pickle(r'C:\Users\danjr\Documents\ML\Air Quality\time_periods_testd.pkl')
             
 fig = plt.figure()
 ax = fig.add_subplot(111)
+
+res = res.dropna(how='all')
 
 for station in res.index:
     

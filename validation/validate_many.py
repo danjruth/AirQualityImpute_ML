@@ -10,31 +10,40 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
+'''
+This script is used to compare the estimation methods (with and without 
+imputation) to known data.
+
+Coordinates of air quality stations reporting PM10 concentrations daily are 
+stored in test_locations.csv. This script can pick out a random sample of those
+stations, remove their readings from  the dataset, perform the estimation, then
+compare the results to the known values.
+
+The script validation_plots.py can be run after this to plot the metrics
+characterizing each approach for each station tested against.
+'''
+
 ### ---- USER INPUTS ---- ###
-
-
 
 r_max_interp = 150 # how far from latlon of interest should it look for stations?
 r_max_ML = 250 # for each station it finds, how far should it look aroud it in imputing the missing values?
 
-start_date = '2011-01-01'
+start_date = '2012-01-01'
 end_date = '2014-12-31'
 
-'''
+
 all_data_all = aq.extract_raw_data(start_date,end_date,param_code=81102)
 
 pm25_data = aq.extract_raw_data(start_date,end_date,param_code=88101)
-#ozone_data = aq.extract_raw_data(start_date,end_date,param_code=44201)
 CO_data = aq.extract_raw_data(start_date,end_date,param_code=42101)
 other_data_all = pd.concat([pm25_data,CO_data])
 #other_data = pd.concat([pm25_data])
 other_data_all = other_data_all.set_index(pd.Series(data=range(len(other_data_all)))) # reindex to get rid of duplicate indices (index here is not significant)
-'''
 
-#latlons = pd.read_csv('C:\Users\danjr\Documents\ML\Air Quality\Code\\validation\\test_locations.csv')
-latlons = pd.read_csv(r'C:\Users\druth\Documents\AirQualityImpute_ML\validation\test_locations.csv')
-#latlons = latlons.iloc[31:,:]
-ix = 34
+
+latlons = pd.read_csv('C:\Users\danjr\Documents\ML\Air Quality\Code\\validation\\test_locations.csv')
+#latlons = pd.read_csv(r'C:\Users\druth\Documents\AirQualityImpute_ML\validation\test_locations.csv')
+ix = 42
 results = pd.DataFrame(columns=latlons.columns)
 results.loc[ix,:] = latlons.loc[ix,:]
 results_dict = {}
@@ -48,7 +57,7 @@ for ix in results.index:
     all_data = all_data.sort_values('Date Local')
     other_data = other_data.sort_values('Date Local')
     
-    start_date = '2013-01-01'
+    start_date = '2014-01-01'
     end_date = '2014-12-31'
     composite_data, orig, stations, station_obj_list, target_data = aq.create_composite_dataset(latlon,start_date,end_date,r_max_interp,r_max_ML,all_data.copy(),other_data.copy(),ignore_closest=True)
     data = aq.predict_aq_vals(composite_data,stations)
